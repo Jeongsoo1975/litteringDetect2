@@ -453,15 +453,48 @@ class VideoThread(QThread):
 
         # 배치 처리 관련 락
         self.batch_lock = threading.Lock()
+        
+        # 디바이스 설정 저장
+        self.device = device
 
         try:
             # 싱글톤 패턴으로 모델 로드
             self.model = load_model_with_spinner("yolov8n.pt")
 
-            # fuse -> half 순서 (fuse를 float에서)
-            self.model.to(device).float()
-            self.model.fuse()
-            self.model.half()
+            # 안전한 모델 초기화 (CUDA 호환성 문제 해결)
+            try:
+                # CUDA가 사용 가능하고 안전한 경우에만 GPU 사용
+                if torch.cuda.is_available():
+                    # GPU로 모델 이동
+                    self.model.to(self.device)
+                    
+                    # CUDA 버전 호환성 확인 후 최적화 적용
+                    try:
+                        # float 상태에서 fuse 시도
+                        self.model.float()
+                        self.model.fuse()
+                        # fuse 성공 시 half precision 적용
+                        if self.device.type == 'cuda':
+                            self.model.half()
+                        logger.info("모델 GPU 최적화 완료 (fuse + half precision)")
+                    except RuntimeError as cuda_err:
+                        # CUDA 오류 발생 시 기본 float로 폴백
+                        logger.warning(f"CUDA 최적화 실패, CPU로 폴백: {str(cuda_err)}")
+                        self.model.cpu().float()
+                        self.device = torch.device("cpu")
+                        logger.info("CPU 모드로 전환됨")
+                else:
+                    # CUDA가 없으면 CPU 사용
+                    self.model.cpu().float()
+                    self.device = torch.device("cpu")
+                    logger.info("CPU 모드로 모델 초기화")
+                    
+            except Exception as model_opt_err:
+                # 모델 최적화 실패 시 기본 설정으로 폴백
+                logger.error(f"모델 최적화 중 오류: {str(model_opt_err)}")
+                self.model.cpu().float()
+                self.device = torch.device("cpu")
+                logger.info("기본 CPU 모드로 폴백 완료")
 
             logger.info("모델 로드 및 초기화 성공")
         except Exception as e:
@@ -477,6 +510,10 @@ class VideoThread(QThread):
         self.vehicle_tracking = {}
         self.violation_vehicles = set()
         self.vehicle_classes = [2, 5, 7]  # car, bus, truck
+        
+        # DetectionStrategyManager 초기화 및 전략 등록
+        self.strategy_manager = DetectionStrategyManager()
+        self._initialize_detection_strategies()
 
         # 프레임 버퍼 설정
         self.continuous_buffer = deque(maxlen=300)  # 적절한 크기로 초기화
@@ -500,6 +537,28 @@ class VideoThread(QThread):
         self.frame_queue = queue.Queue(maxsize=20)  # 적절한 큐 크기 설정
         self.run_flag = threading.Event()
         self.run_flag.set()  # True 상태
+
+    def _initialize_detection_strategies(self):
+        """감지 전략들을 등록하고 활성화하는 함수"""
+        try:
+            # 전략 등록
+            self.strategy_manager.register_strategy("size_range", SizeRangeStrategy())
+            self.strategy_manager.register_strategy("gravity_direction", GravityDirectionStrategy())
+            self.strategy_manager.register_strategy("vehicle_distance", VehicleDistanceStrategy())
+            self.strategy_manager.register_strategy("vehicle_overlap", VehicleOverlapStrategy())
+            self.strategy_manager.register_strategy("direction_alignment", DirectionAlignmentStrategy())
+            self.strategy_manager.register_strategy("vehicle_association", VehicleAssociationStrategy())
+            
+            # 기본 전략 활성화
+            self.strategy_manager.enable_strategy("size_range")
+            self.strategy_manager.enable_strategy("gravity_direction")
+            self.strategy_manager.enable_strategy("vehicle_distance")
+            
+            logger.info(f"DetectionStrategyManager 초기화 완료: {len(self.strategy_manager.get_enabled_strategies())}개 전략 활성화")
+            
+        except Exception as e:
+            logger.error(f"전략 초기화 중 오류: {str(e)}")
+            logger.error(traceback.format_exc())
 
     def debug_detection_info(self, obj_id, bbox, is_detected, strategies_result=None):
         """객체 검출 정보를 디버깅 출력하는 함수"""
@@ -688,7 +747,7 @@ class VideoThread(QThread):
                             results = self.model(
                                 current_batch_frames,
                                 verbose=False,
-                                device=device
+                                device=self.device
                             )
 
                             for i, result in enumerate(results):
@@ -745,7 +804,7 @@ class VideoThread(QThread):
                     results = self.model(
                         remaining_batch_frames,
                         verbose=False,
-                        device=device
+                        device=self.device
                     )
                     for i, result in enumerate(results):
                         original_frame = remaining_batch_originals[i]
@@ -886,60 +945,70 @@ class VideoThread(QThread):
                     self.object_movements[obj_id]["count"] = self.object_movements[obj_id].get("count", 0) + 1
                     self.object_movements[obj_id]["last_update"] = time.time()
 
-            # 전략 매니저에 해당하는 코드가 없으므로 간단한 판정 로직을 적용
-            # 이 부분은 detection_strategies.py와 함께 사용할 때 수정 필요
+            # DetectionStrategyManager를 이용한 체계적인 감지 로직
             if len(self.object_movements[obj_id]["trajectory"]) >= 2:
                 # 카운트가 임계값을 넘었는지 확인
                 count = self.object_movements[obj_id].get("count", 0)
-                min_frames = self.config.min_frame_count_for_violation  # 이 값은 Config에서 가져온 것
-
-                # 하강 움직임 확인
-                is_falling = self.check_gravity_direction(self.object_movements[obj_id]["trajectory"])
-
-                # 쓰레기 투기로 판정 (하강 움직임이 있고, 프레임 카운트가 충분하며, 차량과 가까움)
-                is_falling = self.check_gravity_direction(self.object_movements[obj_id]["trajectory"])
-                near_vehicle = self.check_vehicle_distance(current_center, vehicle_info)
-
-                # 판정 결과 취합
-                detection_result = is_falling and count >= min_frames and near_vehicle
-                strategy_results = {
-                    "gravity_direction": is_falling,
-                    "count_threshold": count >= min_frames,
-                    "vehicle_distance": near_vehicle
-                }
-
-                # 디버깅 정보 출력
-                self.debug_detection_info(obj_id, (x, y, w, h), detection_result, strategy_results)
-
-                if detection_result and not self.object_movements[obj_id].get("video_saved", False):
-                    logger.info(f"쓰레기 투기 감지: ID={obj_id}, 프레임 카운트={count}")
-                    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
-                # 쓰레기 투기로 판정 (하강 움직임이 있고, 프레임 카운트가 충분하며, 차량과 가까움)
-                if is_falling and count >= min_frames and near_vehicle and not self.object_movements[obj_id].get(
-                        "video_saved", False):
-                    logger.info(f"쓰레기 투기 감지: ID={obj_id}, 프레임 카운트={count}")
-                    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
-
-                    # 차량과 위반 연결
-                    self.link_violation_with_vehicle(obj_id, current_center, w)
-
-                    # 쓰레기 투기 감지 신호 발생
-                    bbox = (x, y, x + w, y + h)
-                    class_name = "litter"
-                    confidence = 1.0
-                    strategy_results = {"gravity_direction": True, "vehicle_distance": True}
-                    self.littering_detected_signal.emit(bbox, class_name, confidence, strategy_results)
-
-                    # 이벤트 활성화 (중복 방지)
-                    with self.event_lock:
-                        if not self.event_active:  # 'video_saved' 체크 제거
-                            self.event_triggered_at = self.current_frame_index
-                            self.event_active = True
-                            logger.info(f"쓰레기 투기 이벤트 활성화: 프레임 #{self.event_triggered_at}")
-                            self.object_movements[obj_id]["video_saved"] = True
-
-                            # 이벤트 활성화 직후 즉시 한 번 호출 (현재 프레임에 대해)
-                            self.collect_post_event_frame(frame, roi_x1, roi_y1)
+                min_frames = self.config.min_frame_count_for_violation
+                
+                # 카운트 임계값 미달 시 검사 스킵
+                if count < min_frames:
+                    continue
+                
+                try:
+                    # DetectionStrategyManager를 사용한 전략 검사
+                    strategy_results = self.strategy_manager.check_strategies(
+                        frame=frame,
+                        tracking_info=self.object_movements[obj_id]["trajectory"],
+                        config=self.config,
+                        vehicle_info=vehicle_info
+                    )
+                    
+                    # Config의 detection_logic 설정에 따른 최종 판정
+                    if self.config.detection_logic == "ANY":
+                        # 하나라도 True면 성공
+                        detection_result = any(strategy_results.values()) if strategy_results else False
+                    elif self.config.detection_logic == "ALL":
+                        # 모두 True면 성공
+                        detection_result = all(strategy_results.values()) if strategy_results else False
+                    else:
+                        # 기본값: ALL
+                        detection_result = all(strategy_results.values()) if strategy_results else False
+                    
+                    # 디버깅 정보 출력
+                    self.debug_detection_info(obj_id, (x, y, w, h), detection_result, strategy_results)
+                    
+                    # 쓰레기 투기 감지 처리
+                    if detection_result and not self.object_movements[obj_id].get("video_saved", False):
+                        logger.info(f"쓰레기 투기 감지: ID={obj_id}, 프레임 카운트={count}")
+                        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
+                        
+                        # 차량과 위반 연결
+                        self.link_violation_with_vehicle(obj_id, current_center, w)
+                        
+                        # 쓰레기 투기 감지 신호 발생
+                        bbox = (x, y, x + w, y + h)
+                        class_name = "litter"
+                        confidence = 1.0
+                        self.littering_detected_signal.emit(bbox, class_name, confidence, strategy_results)
+                        
+                        # 이벤트 활성화 (중복 방지)
+                        with self.event_lock:
+                            if not self.event_active:
+                                self.event_triggered_at = self.current_frame_index
+                                self.event_active = True
+                                logger.info(f"쓰레기 투기 이벤트 활성화: 프레임 #{self.event_triggered_at}")
+                                self.object_movements[obj_id]["video_saved"] = True
+                                
+                                # 이벤트 활성화 직후 즉시 한 번 호출 (현재 프레임에 대해)
+                                self.collect_post_event_frame(frame, roi_x1, roi_y1)
+                                
+                except Exception as e:
+                    logger.error(f"전략 검사 중 오류 (객체 ID: {obj_id}): {str(e)}")
+                    logger.error(traceback.format_exc())
+                    # 오류 발생 시 기본 로직으로 폴백
+                    strategy_results = {"error": True}
+                    self.debug_detection_info(obj_id, (x, y, w, h), False, strategy_results)
 
     def check_gravity_direction(self, trajectory):
         """궤적에서 하강 움직임을 확인하는 함수"""
