@@ -553,8 +553,13 @@ class VideoThread(QThread):
             self.strategy_manager.enable_strategy("size_range")
             self.strategy_manager.enable_strategy("gravity_direction")
             self.strategy_manager.enable_strategy("vehicle_distance")
+            self.strategy_manager.enable_strategy("direction_alignment")  # DirectionAlignmentStrategy 활성화 추가
             
-            logger.info(f"DetectionStrategyManager 초기화 완료: {len(self.strategy_manager.get_enabled_strategies())}개 전략 활성화")
+            # 활성화된 전략 목록 로깅
+            enabled_strategies = self.strategy_manager.get_enabled_strategies()
+            strategy_names = [strategy.name() for strategy in enabled_strategies.values()]
+            logger.info(f"DetectionStrategyManager 초기화 완료: {len(enabled_strategies)}개 전략 활성화")
+            logger.info(f"활성화된 전략들: {', '.join(strategy_names)}")
             
         except Exception as e:
             logger.error(f"전략 초기화 중 오류: {str(e)}")
