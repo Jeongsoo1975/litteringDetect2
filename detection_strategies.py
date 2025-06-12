@@ -225,31 +225,34 @@ class GravityDirectionStrategy(DetectionStrategy):
             logger.debug(f"[{self.name()}] 추적 정보 부족 (최소 2개 필요) - 배제")
             return False
 
-        # 임계값 프레임 수까지 도달하지 않았으면 현재까지의 프레임으로 판단
-        use_frames = min(len(tracking_info), config.min_frame_count_for_violation)
-
-        # 현재 궤적에서 하강 움직임 확인 (최근 use_frames 개수만큼)
-        y_diffs = []
+        # 전체 궤적에서 y 방향 이동 확인 (모든 프레임 검사)
+        y_movements = []
         for i in range(1, len(tracking_info)):
             prev_pos = tracking_info[i - 1]['center']
             curr_pos = tracking_info[i]['center']
             y_diff = curr_pos[1] - prev_pos[1]
-            y_diffs.append(y_diff)
-
-        # 최근 프레임들의 하강 움직임 확인
-        recent_diffs = y_diffs[-use_frames + 1:] if len(y_diffs) > use_frames - 1 else y_diffs
-
-        # 각 프레임마다 최소 1픽셀 이상 아래로 이동했는지 확인
-        downward_count = sum(1 for diff in recent_diffs if diff >= 1)
-
-        # 대부분(80% 이상)의 프레임이 하강 움직임을 보이는지 확인
-        threshold_count = max(1, int(len(recent_diffs) * 0.8))  # 최소 1개 이상 필요
-        result = downward_count >= threshold_count
-
+            y_movements.append(y_diff)
+            
+            # y 방향이 한 번이라도 역행(상승)하면 즉시 실패
+            if y_diff < 0:  # 상승 움직임 (y 좌표 감소)
+                logger.debug(f"[{self.name()}] 프레임 {i}에서 상승 움직임 감지 (y변화: {y_diff}px) - 배제")
+                return False
+        
+        # 모든 이동이 0 이상(정지 또는 하강)인지 확인
+        # 최소 하나 이상의 실제 하강 움직임(y_diff > 0)이 있어야 함
+        downward_moves = sum(1 for diff in y_movements if diff > 0)
+        total_moves = len(y_movements)
+        
+        # 전체 이동 중 최소 50% 이상이 실제 하강 움직임이어야 함
+        min_downward_ratio = 0.5
+        downward_ratio = downward_moves / total_moves if total_moves > 0 else 0
+        
+        result = downward_ratio >= min_downward_ratio and downward_moves >= 1
+        
         if result:
-            logger.debug(f"[{self.name()}] 연속적인 하강 움직임 감지 (하강 프레임: {downward_count}/{len(recent_diffs)}) - 통과")
+            logger.debug(f"[{self.name()}] 순수 하강 궤적 확인 (하강 움직임: {downward_moves}/{total_moves}, 비율: {downward_ratio:.1%}) - 통과")
         else:
-            logger.debug(f"[{self.name()}] 연속적인 하강 움직임 부족 (하강 프레임: {downward_count}/{len(recent_diffs)}) - 배제")
+            logger.debug(f"[{self.name()}] 하강 움직임 부족 (하강 움직임: {downward_moves}/{total_moves}, 비율: {downward_ratio:.1%}, 최소 요구: {min_downward_ratio:.1%}) - 배제")
 
         return result
 
