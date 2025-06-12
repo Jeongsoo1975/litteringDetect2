@@ -1110,7 +1110,17 @@ class VideoThread(QThread):
                 count = self.object_movements[obj_id].get("count", 0)
                 min_frames = self.config.min_frame_count_for_violation
                 
-                # 카운트 임계값 미달 시 검사 스킵
+                # 모든 객체에 대해 기본 디버깅 정보 출력 (임계값 관계없이)
+                if self.config.debug_detection:
+                    # 임계값 미달 객체는 간단한 정보만 출력
+                    if count < min_frames:
+                        print(f"\n🔍 [객체 추적 정보] ID: {obj_id}")
+                        print(f"📊 프레임 카운트: {count}/{min_frames} (임계값 미달 - 전략 검사 스킵)")
+                        print(f"📍 현재 위치: ({x + w // 2}, {y + h // 2})")
+                        print(f"📏 크기: {w} x {h} (면적: {w*h} 픽셀)")
+                        print(f"{'='*40}\n")
+                
+                # 카운트 임계값 미달 시 전략 검사 스킵
                 if count < min_frames:
                     continue
                 
@@ -1134,7 +1144,7 @@ class VideoThread(QThread):
                         # 기본값: ALL
                         detection_result = all(strategy_results.values()) if strategy_results else False
                     
-                    # 디버깅 정보 출력
+                    # 상세 디버깅 정보 출력 (임계값 충족 객체만)
                     self.debug_detection_info(obj_id, (x, y, w, h), detection_result, strategy_results)
                     
                     # 상세 전략 분석 출력 (검출 여부와 관계없이)
