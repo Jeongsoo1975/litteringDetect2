@@ -565,8 +565,31 @@ class VideoThread(QThread):
         if not self.config.debug_detection:
             return  # 디버깅 모드가 아니면 출력하지 않음
 
-        x, y, w, h = bbox if len(bbox) == 4 else bbox[0], bbox[1], bbox[2] - bbox[0], bbox[3] - bbox[1]
+        # bbox 형식 정규화 및 좌표 추출
+        try:
+            # bbox가 tuple 안에 tuple인 경우 처리
+            if isinstance(bbox, tuple) and len(bbox) == 2 and isinstance(bbox[0], tuple):
+                bbox = bbox[0]  # 첫 번째 tuple만 사용
+            
+            if len(bbox) == 4:
+                x, y, w, h = bbox
+                # w, h가 음수인 경우 (x1,y1,x2,y2) 형식으로 간주
+                if w < 0 or h < 0:
+                    x1, y1, x2, y2 = bbox
+                    x, y = x1, y1
+                    w, h = x2 - x1, y2 - y1
+                    # 여전히 음수면 절댓값 사용
+                    w, h = abs(w), abs(h)
+            else:
+                x, y, w, h = 0, 0, 0, 0
+                print(f"⚠️  경고: 잘못된 bbox 형식: {bbox}")
+                
+        except Exception as e:
+            x, y, w, h = 0, 0, 0, 0
+            print(f"⚠️  경고: bbox 처리 중 오류: {e}, bbox: {bbox}")
+        
         status = "✅성공" if is_detected else "❌실패"
+        area = w * h
         
         # 객체 추적 정보 추가
         tracking_info = self.object_movements.get(obj_id, {})
@@ -575,11 +598,15 @@ class VideoThread(QThread):
         
         print(f"\n{'='*60}")
         print(f"🎯 [객체 추적 디버깅] ID: {obj_id}")
-        print(f"📍 좌표: ({x}, {y}) 크기: {w}x{h} (면적: {w*h})")
+        print(f"📍 좌표: ({x}, {y}) 크기: {w} x {h} (면적: {area} 픽셀)")
         print(f"📊 프레임 카운트: {frame_count}/{self.config.min_frame_count_for_violation}")
         print(f"📈 궤적 길이: {trajectory_length}")
         print(f"🎯 최종 검출: {status}")
         print(f"⚙️  로직 모드: {self.config.detection_logic}")
+        
+        # 크기 범위 체크 추가
+        size_status = "✅" if self.config.min_size <= area <= self.config.max_size else "❌"
+        print(f"📏 크기 체크: {size_status} (범위: {self.config.min_size} ~ {self.config.max_size} 픽셀)")
 
         # 전략별 결과가 있다면 상세 출력
         if strategies_result and isinstance(strategies_result, dict):
