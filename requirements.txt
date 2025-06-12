@@ -1,0 +1,6 @@
+opencv-python
+numpy
+Pillow
+PyQt5
+ultralytics
+torch

@@ -1,0 +1,33 @@
+# Python 가상환경
+.venv/
+venv/
+ENV/
+
+# 파이썬 캐시 파일
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# 로그 파일
+*.log
+LOG/
+
+# 분석/디버그 파일
+.coverage
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+.pytest_cache/
+
+# IDE 관련 파일
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS 관련 파일
+.DS_Store
+Thumbs.db 

@@ -1,0 +1,21 @@
+# CUDA 지원 PyTorch 설치 명령어
+
+# 1. 가상환경 활성화 (이미 활성화되어 있다면 생략)
+# Windows
+.\.venv\Scripts\activate
+
+# 2. 기존 PyTorch 제거 (충돌 방지)
+pip uninstall -y torch torchvision torchaudio
+
+# 3. CUDA 지원 PyTorch 설치
+# CUDA 12.1용 (RTX 5080에 권장)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# 또는 CUDA 11.8용
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# 4. 설치 확인
+python -c "import torch; print('PyTorch 버전:', torch.__version__); print('CUDA 사용 가능:', torch.cuda.is_available()); print('CUDA 버전:', torch.version.cuda if torch.cuda.is_available() else 'N/A')"
+
+# 5. GPU 확인 스크립트 실행
+python check_gpu.py 
