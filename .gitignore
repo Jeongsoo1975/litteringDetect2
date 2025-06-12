@@ -13,6 +13,7 @@ __pycache__/
 # 로그 파일
 *.log
 LOG/
+output/
 
 # 분석/디버그 파일
 .coverage
