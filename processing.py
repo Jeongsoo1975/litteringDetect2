@@ -1153,8 +1153,12 @@ class VideoThread(QThread):
                     
                     # 쓰레기 투기 감지 처리
                     if detection_result and not self.object_movements[obj_id].get("video_saved", False):
-                        logger.info(f"쓰레기 투기 감지: ID={obj_id}, 프레임 카운트={count}")
+                        logger.info(f"🎯 쓰레기 투기 감지 성공: ID={obj_id}, 프레임 카운트={count}")
                         cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
+                        
+                        # 🔥 핵심: 감지 완료 플래그 설정 (더 이상 전략 검사하지 않음)
+                        self.object_movements[obj_id]["detection_completed"] = True
+                        self.object_movements[obj_id]["video_saved"] = True
                         
                         # 차량과 위반 연결
                         self.link_violation_with_vehicle(obj_id, current_center, w)
@@ -1171,7 +1175,6 @@ class VideoThread(QThread):
                                 self.event_triggered_at = self.current_frame_index
                                 self.event_active = True
                                 logger.info(f"쓰레기 투기 이벤트 활성화: 프레임 #{self.event_triggered_at}")
-                                self.object_movements[obj_id]["video_saved"] = True
                                 
                                 # 이벤트 활성화 직후 즉시 한 번 호출 (현재 프레임에 대해)
                                 self.collect_post_event_frame(frame, roi_x1, roi_y1)
