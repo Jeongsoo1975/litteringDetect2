@@ -43,7 +43,7 @@ class VehicleOverlapStrategy(DetectionStrategy):
 
     def check(self, frame, tracking_info, config, vehicle_info=None):
         logger.debug(
-            f"[{self.name()}] 전략 검사 시작: tracking_info={len(tracking_info) if tracking_info else 0}, vehicle_info={len(vehicle_info) if vehicle_info else 0}")
+            f"\n🔎 [{self.name()}] 전략 검사 시작: tracking_info={len(tracking_info) if tracking_info else 0}, vehicle_info={len(vehicle_info) if vehicle_info else 0}")
 
         if not vehicle_info or not tracking_info:
             logger.debug(f"[{self.name()}] 차량 정보 또는 추적 정보 없음 - 통과")
@@ -104,7 +104,7 @@ class SizeRangeStrategy(DetectionStrategy):
         return "선정된 오브젝트의 픽셀 수(크기)가, 설정된 최소/최대 범위 이내인지 확인"
 
     def check(self, frame, tracking_info, config, vehicle_info=None):
-        logger.debug(f"[{self.name()}] 전략 검사 시작: tracking_info={len(tracking_info) if tracking_info else 0}")
+        logger.debug(f"\n📏 [{self.name()}] 전략 검사 시작: tracking_info={len(tracking_info) if tracking_info else 0}")
 
         if not tracking_info or len(tracking_info) < 1:
             logger.debug(f"[{self.name()}] 추적 정보 없음 - 배제")
@@ -138,7 +138,7 @@ class VehicleDistanceStrategy(DetectionStrategy):
     def check(self, frame, tracking_info, config, vehicle_info=None):
         """차량과 쓰레기 객체 간의 연관성 확인"""
         logger.debug(
-            f"[{self.name()}] 전략 검사 시작: tracking_info={len(tracking_info) if tracking_info else 0}, vehicle_info={len(vehicle_info) if vehicle_info else 0}")
+            f"\n🚗 [{self.name()}] 전략 검사 시작: tracking_info={len(tracking_info) if tracking_info else 0}, vehicle_info={len(vehicle_info) if vehicle_info else 0}")
 
         if not vehicle_info or not tracking_info:
             logger.debug(f"[{self.name()}] 차량 정보 또는 추적 정보 없음 - 배제")
@@ -218,7 +218,7 @@ class GravityDirectionStrategy(DetectionStrategy):
         return "오브젝트가 중력 방향(아래쪽)으로 연속해서 이동하는지 확인"
 
     def check(self, frame, tracking_info, config, vehicle_info=None):
-        logger.debug(f"[{self.name()}] 전략 검사 시작: tracking_info={len(tracking_info) if tracking_info else 0}")
+        logger.debug(f"\n⬇️ [{self.name()}] 전략 검사 시작: tracking_info={len(tracking_info) if tracking_info else 0}")
 
         # 최소 프레임 수 확인 (최소 2개 필요)
         if len(tracking_info) < 2:
@@ -264,7 +264,7 @@ class DirectionAlignmentStrategy(DetectionStrategy):
         return "이동방향이 좌측인 경우 오브젝트가 바운딩박스 좌측과, 우측인 경우 바운딩박스 우측과 더 가까운지 확인"
 
     def check(self, frame, tracking_info, config, vehicle_info=None):
-        logger.debug(f"[{self.name()}] 전략 검사 시작: tracking_info={len(tracking_info) if tracking_info else 0}")
+        logger.debug(f"\n➡️ [{self.name()}] 전략 검사 시작: tracking_info={len(tracking_info) if tracking_info else 0}")
 
         if len(tracking_info) < 2 or not tracking_info[-1].get('bbox') or not vehicle_info:
             logger.debug(f"[{self.name()}] 추적 정보 부족 또는 차량 정보 없음 - 통과")
@@ -410,13 +410,15 @@ class DetectionStrategyManager:
             else:
                 logger.warning(f"존재하지 않는 전략 ID: {strategy_id}")
 
-        # 결과 집계
+        # 결과 집계 및 최종 판정
         if config.detection_logic == "ANY":
             # 하나라도 True면 성공
             final_result = any(results.values()) if results else False
+            logic_description = "OR 로직 (하나라도 통과)"
         elif config.detection_logic == "ALL":
             # 모두 True면 성공
             final_result = all(results.values()) if results else False
+            logic_description = "AND 로직 (모두 통과)"
         elif config.detection_logic == "SMART":
             # 필수 전략은 모두 충족해야 하고, 선택적 전략은 하나 이상 충족해야 함
             required_results = [results.get(strategy_id, False) for strategy_id in required_strategies
@@ -429,12 +431,15 @@ class DetectionStrategyManager:
             optional_pass = any(optional_results) if optional_results else True  # 활성화된 optional 전략이 없으면 통과
 
             final_result = required_pass and optional_pass
+            logic_description = f"SMART 로직 (필수: {required_pass}, 선택: {optional_pass})"
         else:
             # 기본값: ALL
             final_result = all(results.values()) if results else False
+            logic_description = "기본 AND 로직 (모두 통과)"
 
-        # 모든 전략 검사 결과 로깅
-        logger.debug(f"전체 전략 검사 결과: {final_result}, 상세={results}")
+        # 최종 결과 로깅
+        result_icon = "✅" if final_result else "❌"
+        logger.debug(f"\n🏁 ========== 최종 판정 결과 ==========\n{result_icon} 전체 전략 검사 결과: {final_result}\n📋 {logic_description}\n📊 상세 결과: {results}\n{'='*50}\n")
 
         return results
 

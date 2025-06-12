@@ -561,18 +561,145 @@ class VideoThread(QThread):
             logger.error(traceback.format_exc())
 
     def debug_detection_info(self, obj_id, bbox, is_detected, strategies_result=None):
-        """객체 검출 정보를 디버깅 출력하는 함수"""
+        """객체 검출 정보를 디버깅 출력하는 함수 - 향상된 버전"""
         if not self.config.debug_detection:
             return  # 디버깅 모드가 아니면 출력하지 않음
 
         x, y, w, h = bbox if len(bbox) == 4 else bbox[0], bbox[1], bbox[2] - bbox[0], bbox[3] - bbox[1]
-        status = "성공" if is_detected else "실패"
+        status = "✅성공" if is_detected else "❌실패"
+        
+        # 객체 추적 정보 추가
+        tracking_info = self.object_movements.get(obj_id, {})
+        frame_count = tracking_info.get("count", 0)
+        trajectory_length = len(tracking_info.get("trajectory", []))
+        
+        print(f"\n{'='*60}")
+        print(f"🎯 [객체 추적 디버깅] ID: {obj_id}")
+        print(f"📍 좌표: ({x}, {y}) 크기: {w}x{h} (면적: {w*h})")
+        print(f"📊 프레임 카운트: {frame_count}/{self.config.min_frame_count_for_violation}")
+        print(f"📈 궤적 길이: {trajectory_length}")
+        print(f"🎯 최종 검출: {status}")
+        print(f"⚙️  로직 모드: {self.config.detection_logic}")
 
-        print(f"[객체 디버깅] ID: {obj_id}, 좌표: ({x}, {y}, {w}, {h}), 검출: {status}")
-
-        # 전략별 결과가 있다면 출력
+        # 전략별 결과가 있다면 상세 출력
         if strategies_result and isinstance(strategies_result, dict):
-            print(f"  전략 결과: {strategies_result}")
+            print(f"\n📋 [전략별 상세 결과]")
+            for strategy_id, result in strategies_result.items():
+                status_icon = "✅" if result else "❌"
+                strategy_name = "알 수 없는 전략"
+                
+                # 전략 이름 가져오기
+                if hasattr(self, 'strategy_manager') and strategy_id in self.strategy_manager.strategies:
+                    strategy_name = self.strategy_manager.strategies[strategy_id].name()
+                
+                print(f"  {status_icon} {strategy_id} ({strategy_name}): {result}")
+
+        # 객체 궤적 정보 출력
+        if trajectory_length > 1:
+            trajectory = tracking_info.get("trajectory", [])
+            recent_positions = trajectory[-min(5, len(trajectory)):]  # 최근 5개 위치
+            
+            print(f"\n📍 [최근 이동 경로] (최근 {len(recent_positions)}개 위치)")
+            for i, pos_info in enumerate(recent_positions):
+                center = pos_info.get('center', (0, 0))
+                print(f"  {i+1}. ({center[0]}, {center[1]})")
+                
+            # 이동 방향 계산 및 출력
+            if len(recent_positions) >= 2:
+                first_pos = recent_positions[0]['center']
+                last_pos = recent_positions[-1]['center']
+                dx = last_pos[0] - first_pos[0]
+                dy = last_pos[1] - first_pos[1]
+                
+                direction = "정지"
+                if abs(dx) > 3 or abs(dy) > 3:  # 최소 이동 거리
+                    if abs(dx) > abs(dy):
+                        direction = "우측" if dx > 0 else "좌측"
+                    else:
+                        direction = "하강" if dy > 0 else "상승"
+                
+                print(f"  🧭 이동 방향: {direction} (dx: {dx:+.1f}, dy: {dy:+.1f})")
+
+        print(f"{'='*60}\n")
+
+    def debug_strategy_details(self, obj_id, tracking_info, vehicle_info):
+        """전략별 상세 분석 정보를 출력하는 함수"""
+        if not self.config.debug_detection:
+            return
+
+        if not tracking_info or len(tracking_info) < 1:
+            return
+
+        print(f"\n🔍 [전략별 상세 분석] 객체 ID: {obj_id}")
+        
+        # 현재 객체 정보
+        current_info = tracking_info[-1]
+        current_center = current_info['center']
+        current_bbox = current_info['bbox']
+        
+        # 1. 크기 범위 전략 분석
+        width = current_bbox[2] - current_bbox[0]
+        height = current_bbox[3] - current_bbox[1]
+        area = width * height
+        size_valid = self.config.min_size <= area <= self.config.max_size
+        print(f"📏 크기 분석: 면적={area} (범위: {self.config.min_size}-{self.config.max_size}) {'✅' if size_valid else '❌'}")
+        
+        # 2. 중력 방향 전략 분석
+        if len(tracking_info) >= 2:
+            y_movements = []
+            for i in range(1, len(tracking_info)):
+                prev_y = tracking_info[i-1]['center'][1]
+                curr_y = tracking_info[i]['center'][1]
+                y_diff = curr_y - prev_y
+                y_movements.append(y_diff)
+            
+            downward_moves = sum(1 for diff in y_movements if diff >= 1)
+            total_moves = len(y_movements)
+            downward_ratio = downward_moves / total_moves if total_moves > 0 else 0
+            
+            print(f"⬇️  중력 분석: 하강 움직임 {downward_moves}/{total_moves} ({downward_ratio:.1%}) {'✅' if downward_ratio >= 0.8 else '❌'}")
+        
+        # 3. 차량 거리 전략 분석
+        if vehicle_info:
+            min_distance = float('inf')
+            closest_vehicle = None
+            
+            for i, vehicle in enumerate(vehicle_info):
+                veh_center = vehicle['center']
+                distance = math.sqrt((current_center[0] - veh_center[0])**2 + (current_center[1] - veh_center[1])**2)
+                if distance < min_distance:
+                    min_distance = distance
+                    closest_vehicle = i
+            
+            distance_valid = min_distance <= self.config.distance_trash
+            print(f"🚗 차량 거리: 최근접={min_distance:.1f}px (기준: {self.config.distance_trash}px) {'✅' if distance_valid else '❌'}")
+            
+            if closest_vehicle is not None:
+                vehicle = vehicle_info[closest_vehicle]
+                veh_bbox = vehicle['bbox']
+                print(f"    가장 가까운 차량: ({veh_bbox[0]}, {veh_bbox[1]}, {veh_bbox[2]}, {veh_bbox[3]})")
+        else:
+            print(f"🚗 차량 거리: 차량 정보 없음 ❌")
+        
+        # 4. 차량 겹침 전략 분석
+        if vehicle_info:
+            overlap_detected = False
+            for vehicle in vehicle_info:
+                veh_bbox = vehicle['bbox']
+                
+                # 중심점이 차량 내부에 있는지 확인
+                if (veh_bbox[0] <= current_center[0] <= veh_bbox[2] and
+                    veh_bbox[1] <= current_center[1] <= veh_bbox[3]):
+                    overlap_detected = True
+                    print(f"🚫 차량 겹침: 객체 중심점이 차량 내부에 위치 ❌")
+                    break
+            
+            if not overlap_detected:
+                print(f"🚫 차량 겹침: 차량과 겹치지 않음 ✅")
+        else:
+            print(f"🚫 차량 겹침: 차량 정보 없음 ✅")
+        
+        print()  # 빈 줄 추가
 
     def validate_video_file(self, file_path: str) -> bool:
         """
@@ -977,6 +1104,10 @@ class VideoThread(QThread):
                     
                     # 디버깅 정보 출력
                     self.debug_detection_info(obj_id, (x, y, w, h), detection_result, strategy_results)
+                    
+                    # 상세 전략 분석 출력 (검출 여부와 관계없이)
+                    if self.config.debug_detection:
+                        self.debug_strategy_details(obj_id, self.object_movements[obj_id]["trajectory"], vehicle_info)
                     
                     # 쓰레기 투기 감지 처리
                     if detection_result and not self.object_movements[obj_id].get("video_saved", False):
