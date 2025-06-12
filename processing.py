@@ -97,7 +97,7 @@ class Config:
         self.detection_logic = "ALL"  # "ANY": 어느 하나라도 충족, "ALL": 모두 충족
 
         # 디버깅 관련 설정 추가
-        self.debug_detection = False  # 객체 검출 디버깅 기본값은 False
+        self.debug_detection = True  # 객체 검출 디버깅 활성화
 
 
 # Config 객체 생성
