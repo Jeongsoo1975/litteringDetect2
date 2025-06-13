@@ -1087,6 +1087,32 @@ class VideoThread(QThread):
         roi_x2 = self.roi_x + self.roi_width
         roi_y2 = self.roi_y + self.roi_height
 
+        # 🧪 ID 398 테스트용 하드코딩 - 강제 바운딩박스 생성
+        hardcoded_398_detected = False
+        for (x, y, w, h, obj_id) in tracked_objects:
+            if obj_id == 398:
+                hardcoded_398_detected = True
+                logger.info(f"🧪 [ID 398 테스트 모드] 객체 감지됨 - 강제 바운딩박스 생성")
+                
+                # 강제로 빨간색 바운딩박스 생성 (테스트용)
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 3)
+                cv2.putText(frame, f"TEST ID-398 HARDCODE", (x, y - 15),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                cv2.putText(frame, f"POS:({x+w//2},{y+h//2}) SIZE:{w}x{h}", (x, y + h + 20),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
+                break
+        
+        if hardcoded_398_detected:
+            # ID 398이 감지되면 추가 디버깅 정보 출력
+            logger.info(f"🧪 [ID 398 하드코딩 테스트] 감지된 객체 정보:")
+            for (x, y, w, h, obj_id) in tracked_objects:
+                if obj_id == 398:
+                    center = (x + w // 2, y + h // 2)
+                    area = w * h
+                    logger.info(f"    위치: ({center[0]}, {center[1]})")
+                    logger.info(f"    크기: {w} x {h} (면적: {area} 픽셀)")
+                    logger.info(f"    바운딩박스: ({x}, {y}, {x+w}, {y+h})")
+
         # 차량 정보 변환 (yolo_boxes를 전략 클래스가 기대하는 형식으로)
         vehicle_info = self.get_vehicle_info_from_boxes(yolo_boxes)
 
@@ -1163,6 +1189,42 @@ class VideoThread(QThread):
                     self.object_movements[obj_id]["count"] = self.object_movements[obj_id].get("count", 0) + 1
                     self.object_movements[obj_id]["last_update"] = time.time()
 
+                # 🧪 ID 398 특별 처리 - 상세 궤적 분석
+                if obj_id == 398:
+                    logger.info(f"🧪 [ID 398 궤적 분석]")
+                    trajectory = self.object_movements[obj_id]["trajectory"]
+                    logger.info(f"    총 궤적 길이: {len(trajectory)}")
+                    
+                    # 최근 5개 위치 출력
+                    recent_positions = trajectory[-min(5, len(trajectory)):]
+                    logger.info(f"    최근 {len(recent_positions)}개 위치:")
+                    for i, pos_info in enumerate(recent_positions):
+                        center = pos_info.get('center', (0, 0))
+                        logger.info(f"      {i+1}. ({center[0]}, {center[1]})")
+                    
+                    # 이동 방향 분석
+                    if len(recent_positions) >= 2:
+                        first_pos = recent_positions[0]['center']
+                        last_pos = recent_positions[-1]['center']
+                        dx = last_pos[0] - first_pos[0]
+                        dy = last_pos[1] - first_pos[1]
+                        logger.info(f"    이동 벡터: dx={dx:+.1f}, dy={dy:+.1f}")
+                        
+                        # 이동 패턴 분석
+                        if abs(dx) > abs(dy):
+                            direction = "수평 이동 (우측)" if dx > 0 else "수평 이동 (좌측)"
+                        else:
+                            direction = "수직 이동 (하강)" if dy > 0 else "수직 이동 (상승)"
+                        logger.info(f"    주 이동 방향: {direction}")
+                        
+                        # 수평 이동 비율 계산
+                        horizontal_ratio = abs(dx) / (abs(dx) + abs(dy)) if (abs(dx) + abs(dy)) > 0 else 0
+                        logger.info(f"    수평 이동 비율: {horizontal_ratio:.1%}")
+                        
+                        # 경고: 수평 이동이 80% 이상일 경우
+                        if horizontal_ratio > 0.8:
+                            logger.warning(f"🚨 [ID 398 경고] 수평 이동 비율이 높음 ({horizontal_ratio:.1%}) - 쓰레기가 아닐 가능성")
+
             # DetectionStrategyManager를 이용한 체계적인 감지 로직
             if len(self.object_movements[obj_id]["trajectory"]) >= 2:
                 # 카운트가 임계값을 넘었는지 확인
@@ -1202,6 +1264,19 @@ class VideoThread(QThread):
                     else:
                         # 기본값: ALL
                         detection_result = all(strategy_results.values()) if strategy_results else False
+                    
+                    # 🧪 ID 398 강제 감지 테스트 (문제 상황 재현)
+                    if obj_id == 398:
+                        logger.warning(f"🧪 [ID 398 테스트 모드] 강제 감지 활성화")
+                        logger.warning(f"    원래 감지 결과: {detection_result}")
+                        logger.warning(f"    전략별 결과: {strategy_results}")
+                        
+                        # 강제로 감지 성공으로 변경 (테스트용)
+                        detection_result = True
+                        strategy_results["HARDCODED_398"] = True
+                        
+                        logger.warning(f"    🚨 강제 변경 후 감지 결과: {detection_result}")
+                        logger.warning(f"    이는 실제 잘못된 감지 상황을 재현하는 테스트입니다!")
                     
                     # 상세 디버깅 정보 출력 (임계값 충족 객체만)
                     self.debug_detection_info(obj_id, (x, y, w, h), detection_result, strategy_results)
