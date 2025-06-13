@@ -78,7 +78,7 @@ def load_model_with_spinner(model_path="yolov8n.pt"):
 class Config:
     def __init__(self):
         # 기존 설정
-        self.min_size = 30
+        self.min_size = 50  # 30에서 50으로 변경
         self.max_size = 300
         self.yolo_confidence_value = 0.35
         self.gravity_direction_threshold = 7  # 중력 방향 임계값
@@ -98,7 +98,7 @@ class Config:
         self.detection_logic = "ALL"  # "ANY": 어느 하나라도 충족, "ALL": 모두 충족
 
         # 디버깅 관련 설정 추가
-        self.debug_detection = True  # 객체 검출 디버깅 활성화
+        self.debug_detection = False  # 객체 검출 디버깅 비활성화 (True에서 False로 변경)
         
         # 성능 최적화 관련 설정 추가
         self.performance_monitoring = True  # 성능 모니터링 활성화
