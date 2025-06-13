@@ -1231,6 +1231,11 @@ class VideoThread(QThread):
                 count = self.object_movements[obj_id].get("count", 0)
                 min_frames = self.config.min_frame_count_for_violation
                 
+                # ID 398 특별 처리 - 임계값을 3으로 낮춤 (빠른 테스트)
+                if obj_id == 398:
+                    min_frames = 3
+                    logger.info(f"[TEST] ID 398 특별 처리 - 임계값을 {min_frames}로 낮춤")
+                
                 # 모든 객체에 대해 기본 디버깅 정보 출력 (임계값 관계없이)
                 if self.config.debug_detection:
                     # 임계값 미달 객체는 간단한 정보만 출력
@@ -1265,18 +1270,19 @@ class VideoThread(QThread):
                         # 기본값: ALL
                         detection_result = all(strategy_results.values()) if strategy_results else False
                     
-                    # ID 398 강제 감지 테스트 (문제 상황 재현)
+                    # ID 398 강제 감지 테스트 (문제 상황 재현) - 비활성화
                     if obj_id == 398:
-                        logger.warning(f"[TEST] [ID 398 테스트 모드] 강제 감지 활성화")
-                        logger.warning(f"    원래 감지 결과: {detection_result}")
+                        logger.warning(f"[TEST] [ID 398 테스트 모드] 실제 전략 결과 확인")
+                        logger.warning(f"    실제 감지 결과: {detection_result}")
                         logger.warning(f"    전략별 결과: {strategy_results}")
                         
-                        # 강제로 감지 성공으로 변경 (테스트용)
-                        detection_result = True
-                        strategy_results["HARDCODED_398"] = True
+                        # 강제 변경하지 않고 실제 결과 그대로 사용
+                        # detection_result = True  # 이 줄을 주석 처리
+                        # strategy_results["HARDCODED_398"] = True  # 이 줄을 주석 처리
                         
-                        logger.warning(f"    [FORCED] 강제 변경 후 감지 결과: {detection_result}")
-                        logger.warning(f"    이는 실제 잘못된 감지 상황을 재현하는 테스트입니다!")
+                        logger.warning(f"    [REAL] 실제 감지 결과 (강제 변경 없음): {detection_result}")
+                        if not detection_result:
+                            logger.warning(f"    [SUCCESS] ID 398이 올바르게 거부되었습니다!")
                     
                     # 상세 디버깅 정보 출력 (임계값 충족 객체만)
                     self.debug_detection_info(obj_id, (x, y, w, h), detection_result, strategy_results)
