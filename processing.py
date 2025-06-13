@@ -22,6 +22,7 @@ from PyQt5.QtGui import QImage, QPixmap  # 이 줄 추가
 import queue
 from detection_strategies import DetectionStrategyManager, VehicleOverlapStrategy, SizeRangeStrategy, VehicleDistanceStrategy, GravityDirectionStrategy, DirectionAlignmentStrategy, VehicleAssociationStrategy
 import csv  # csv 모듈 추가
+from high_performance_cache import HighPerformanceCacheManager, create_high_performance_cache
 
 # 싱글톤 모델 인스턴스를 저장할 전역 변수
 _model_instance = None
@@ -98,6 +99,14 @@ class Config:
 
         # 디버깅 관련 설정 추가
         self.debug_detection = True  # 객체 검출 디버깅 활성화
+        
+        # 성능 최적화 관련 설정 추가
+        self.performance_monitoring = True  # 성능 모니터링 활성화
+        self.target_fps = 15.0  # 목표 FPS
+        self.max_gpu_memory_percent = 80.0  # 최대 GPU 메모리 사용률 (%)
+        self.max_cpu_percent = 70.0  # 최대 CPU 사용률 (%)
+        self.performance_warning_threshold = 0.8  # 성능 경고 임계값 (목표 대비 비율)
+        self.performance_log_interval = 5  # 성능 로그 기록 간격 (초)
 
 
 # Config 객체 생성
@@ -222,6 +231,220 @@ def exception_hook(exctype, value, tb):
 
 
 sys.excepthook = exception_hook
+
+
+##########################
+# PerformanceMonitor 클래스
+##########################
+class PerformanceMonitor:
+    """실시간 성능 모니터링 클래스"""
+    
+    def __init__(self, config):
+        self.config = config
+        self.start_time = time.time()
+        self.frame_count = 0
+        self.last_log_time = time.time()
+        self.fps_history = deque(maxlen=30)  # 최근 30초간 FPS 기록
+        
+        # 성능 로그 파일 설정
+        self.performance_log_file = os.path.join(LOG_DIR, f"performance_benchmark_{datetime.now().strftime('%Y%m%d')}.log")
+        
+        # 성능 로거 설정
+        self.perf_logger = logging.getLogger("performance")
+        self.perf_logger.setLevel(logging.INFO)
+        self.perf_logger.propagate = False
+        
+        # 성능 로그 핸들러 (기존 핸들러와 중복 방지)
+        if not self.perf_logger.handlers:
+            perf_handler = logging.FileHandler(self.performance_log_file)
+            perf_handler.setLevel(logging.INFO)
+            perf_formatter = logging.Formatter('%(asctime)s - %(message)s')
+            perf_handler.setFormatter(perf_formatter)
+            self.perf_logger.addHandler(perf_handler)
+        
+        logger.info(f"PerformanceMonitor 초기화 완료 - 로그 파일: {self.performance_log_file}")
+        
+        # 초기 벤치마크 정보 기록
+        self._log_system_info()
+    
+    def _log_system_info(self):
+        """시스템 정보를 로그에 기록"""
+        try:
+            import psutil
+            
+            # CPU 정보
+            cpu_count = psutil.cpu_count(logical=False)
+            cpu_count_logical = psutil.cpu_count(logical=True)
+            
+            # 메모리 정보
+            memory = psutil.virtual_memory()
+            total_memory_gb = memory.total / (1024**3)
+            
+            # GPU 정보
+            gpu_info = "N/A"
+            if torch.cuda.is_available():
+                gpu_name = torch.cuda.get_device_name(0)
+                gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                gpu_info = f"{gpu_name} ({gpu_memory_gb:.1f}GB)"
+            
+            system_info = f"""
+=== 시스템 성능 벤치마크 시작 ===
+CPU: {cpu_count}코어 ({cpu_count_logical}논리코어)
+메모리: {total_memory_gb:.1f}GB
+GPU: {gpu_info}
+목표 성능: FPS≥{self.config.target_fps}, GPU≤{self.config.max_gpu_memory_percent}%, CPU≤{self.config.max_cpu_percent}%
+==================================="""
+            
+            self.perf_logger.info(system_info)
+            
+        except ImportError:
+            self.perf_logger.info("=== 성능 모니터링 시작 (psutil 없음) ===")
+        except Exception as e:
+            self.perf_logger.error(f"시스템 정보 수집 중 오류: {str(e)}")
+    
+    def update_frame_count(self):
+        """프레임 카운트 업데이트"""
+        self.frame_count += 1
+        
+        # 주기적으로 성능 로그 기록
+        current_time = time.time()
+        if current_time - self.last_log_time >= self.config.performance_log_interval:
+            self._log_performance_metrics()
+            self.last_log_time = current_time
+    
+    def calculate_fps(self):
+        """현재 FPS 계산"""
+        elapsed_time = time.time() - self.start_time
+        if elapsed_time > 0:
+            current_fps = self.frame_count / elapsed_time
+            self.fps_history.append(current_fps)
+            return current_fps
+        return 0.0
+    
+    def get_average_fps(self):
+        """평균 FPS 반환"""
+        if self.fps_history:
+            return sum(self.fps_history) / len(self.fps_history)
+        return 0.0
+    
+    def _log_performance_metrics(self):
+        """성능 지표를 로그에 기록"""
+        try:
+            current_fps = self.calculate_fps()
+            avg_fps = self.get_average_fps()
+            
+            # CPU 사용률
+            cpu_percent = "N/A"
+            memory_percent = "N/A"
+            
+            try:
+                import psutil
+                cpu_percent = psutil.cpu_percent(interval=0.1)
+                memory_percent = psutil.virtual_memory().percent
+            except ImportError:
+                pass
+            
+            # GPU 메모리 사용률
+            gpu_memory_percent = "N/A"
+            gpu_memory_used = "N/A"
+            gpu_memory_total = "N/A"
+            
+            if torch.cuda.is_available():
+                try:
+                    gpu_memory_used_bytes = torch.cuda.memory_allocated(0)
+                    gpu_memory_total_bytes = torch.cuda.get_device_properties(0).total_memory
+                    gpu_memory_used = gpu_memory_used_bytes / (1024**3)  # GB
+                    gpu_memory_total = gpu_memory_total_bytes / (1024**3)  # GB
+                    gpu_memory_percent = (gpu_memory_used_bytes / gpu_memory_total_bytes) * 100
+                except Exception as e:
+                    logger.warning(f"GPU 메모리 정보 수집 실패: {str(e)}")
+            
+            # 성능 지표 로그 기록
+            perf_data = f"FPS: {current_fps:.2f} (평균: {avg_fps:.2f}) | " \
+                       f"CPU: {cpu_percent}% | " \
+                       f"RAM: {memory_percent}% | " \
+                       f"GPU메모리: {gpu_memory_percent}%" \
+                       f" ({gpu_memory_used}GB/{gpu_memory_total}GB)"
+            
+            self.perf_logger.info(perf_data)
+            
+            # 성능 경고 체크
+            self._check_performance_warnings(current_fps, cpu_percent, gpu_memory_percent)
+            
+        except Exception as e:
+            self.perf_logger.error(f"성능 지표 수집 중 오류: {str(e)}")
+    
+    def _check_performance_warnings(self, current_fps, cpu_percent, gpu_memory_percent):
+        """성능 경고 확인 및 알림"""
+        warnings = []
+        
+        # FPS 경고
+        if isinstance(current_fps, (int, float)) and current_fps < self.config.target_fps * self.config.performance_warning_threshold:
+            warnings.append(f"FPS 저하: {current_fps:.2f} < {self.config.target_fps * self.config.performance_warning_threshold:.2f}")
+        
+        # CPU 경고
+        if isinstance(cpu_percent, (int, float)) and cpu_percent > self.config.max_cpu_percent:
+            warnings.append(f"CPU 사용률 높음: {cpu_percent:.1f}% > {self.config.max_cpu_percent}%")
+        
+        # GPU 메모리 경고
+        if isinstance(gpu_memory_percent, (int, float)) and gpu_memory_percent > self.config.max_gpu_memory_percent:
+            warnings.append(f"GPU 메모리 사용률 높음: {gpu_memory_percent:.1f}% > {self.config.max_gpu_memory_percent}%")
+        
+        # 경고 로그 출력
+        if warnings:
+            warning_msg = " | ".join(warnings)
+            self.perf_logger.warning(f"⚠️ 성능 경고: {warning_msg}")
+            logger.warning(f"성능 경고: {warning_msg}")
+    
+    def get_performance_summary(self):
+        """성능 요약 정보 반환"""
+        try:
+            current_fps = self.calculate_fps()
+            avg_fps = self.get_average_fps()
+            
+            # 기본 정보
+            summary = {
+                'current_fps': current_fps,
+                'average_fps': avg_fps,
+                'target_fps': self.config.target_fps,
+                'total_frames': self.frame_count,
+                'uptime_seconds': time.time() - self.start_time
+            }
+            
+            # CPU/메모리 정보 추가
+            try:
+                import psutil
+                summary['cpu_percent'] = psutil.cpu_percent()
+                summary['memory_percent'] = psutil.virtual_memory().percent
+            except ImportError:
+                summary['cpu_percent'] = None
+                summary['memory_percent'] = None
+            
+            # GPU 정보 추가
+            if torch.cuda.is_available():
+                try:
+                    gpu_memory_used = torch.cuda.memory_allocated(0) / (1024**3)
+                    gpu_memory_total = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                    summary['gpu_memory_used_gb'] = gpu_memory_used
+                    summary['gpu_memory_total_gb'] = gpu_memory_total
+                    summary['gpu_memory_percent'] = (gpu_memory_used / gpu_memory_total) * 100
+                except:
+                    summary['gpu_memory_percent'] = None
+            else:
+                summary['gpu_memory_percent'] = None
+            
+            return summary
+            
+        except Exception as e:
+            logger.error(f"성능 요약 생성 중 오류: {str(e)}")
+            return {'error': str(e)}
+    
+    def reset_counters(self):
+        """카운터 리셋"""
+        self.start_time = time.time()
+        self.frame_count = 0
+        self.fps_history.clear()
+        self.perf_logger.info("성능 카운터 리셋")
 
 
 ##########################
@@ -596,6 +819,17 @@ class VideoThread(QThread):
         self.frame_queue = queue.Queue(maxsize=20)  # 적절한 큐 크기 설정
         self.run_flag = threading.Event()
         self.run_flag.set()  # True 상태
+        
+        # 성능 모니터링 초기화
+        if self.config.performance_monitoring:
+            self.performance_monitor = PerformanceMonitor(self.config)
+            logger.info("성능 모니터링 활성화")
+        else:
+            self.performance_monitor = None
+            
+        # 캐시 관리자 초기화 (고성능 버전 사용)
+        self.cache_manager = create_high_performance_cache(self.config)
+        logger.info("고성능 캐시 관리자 초기화 완료")
 
     def _initialize_detection_strategies(self):
         """감지 전략들을 등록하고 활성화하는 함수"""
@@ -757,7 +991,13 @@ class VideoThread(QThread):
             
             for i, vehicle in enumerate(vehicle_info):
                 veh_center = vehicle['center']
-                distance = math.sqrt((current_center[0] - veh_center[0])**2 + (current_center[1] - veh_center[1])**2)
+                
+                # 캐시를 사용한 거리 계산
+                if hasattr(self, 'cache_manager'):
+                    distance = self.cache_manager.get_optimized_distance(current_center, veh_center)
+                else:
+                    distance = math.sqrt((current_center[0] - veh_center[0])**2 + (current_center[1] - veh_center[1])**2)
+                
                 if distance < min_distance:
                     min_distance = distance
                     closest_vehicle = i
@@ -879,6 +1119,11 @@ class VideoThread(QThread):
                 self.frame_queue.get_nowait()
             except queue.Empty:
                 break
+                
+        # 캐시 정리
+        if hasattr(self, 'cache_manager'):
+            self.cache_manager.clear_all_caches()
+            logger.debug("캐시 관리자 정리 완료")
 
         logger.debug("모든 버퍼와 추적 데이터 정리 완료")
 
@@ -990,12 +1235,26 @@ class VideoThread(QThread):
                                 if self.event_active:
                                     self.collect_post_event_frame(frame, roi_x1, roi_y1)
 
-                                # FPS 계산
+                                # 성능 모니터링 업데이트
+                                if self.performance_monitor:
+                                    self.performance_monitor.update_frame_count()
+                                
+                                # FPS 계산 및 출력 (기존 로직 유지하되 성능 모니터와 통합)
                                 frame_count += 1
                                 elapsed_time = time.time() - start_time
                                 if elapsed_time >= 1.0:
                                     fps_show = frame_count / elapsed_time
-                                    logger.info(f"현재 FPS: {fps_show:.2f}")
+                                    if not self.performance_monitor:  # 성능 모니터가 없을 때만 기존 로그 출력
+                                        logger.info(f"현재 FPS: {fps_show:.2f}")
+                                    
+                                    # 10초마다 캐시 성능 통계 로그 출력
+                                    if hasattr(self, 'last_cache_log_time'):
+                                        if time.time() - self.last_cache_log_time >= 10.0:
+                                            self.log_cache_performance()
+                                            self.last_cache_log_time = time.time()
+                                    else:
+                                        self.last_cache_log_time = time.time()
+                                    
                                     frame_count = 0
                                     start_time = time.time()
                         except torch.cuda.OutOfMemoryError:
@@ -1042,6 +1301,10 @@ class VideoThread(QThread):
                         # 이벤트가 활성화된 경우 collect_post_event_frame 호출
                         if self.event_active:
                             self.collect_post_event_frame(frame, roi_x1, roi_y1)
+                        
+                        # 성능 모니터링 업데이트 (남은 배치 처리)
+                        if self.performance_monitor:
+                            self.performance_monitor.update_frame_count()
                 except Exception as e:
                     logger.error(f"남은 배치 처리 중 오류: {str(e)}")
                     logger.error(traceback.format_exc())
@@ -1080,6 +1343,40 @@ class VideoThread(QThread):
             self.clear_buffers()
             cv2.destroyAllWindows()
             logger.info("VideoThread: 리소스 정리 완료")
+
+    def get_cache_performance_stats(self):
+        """캐시 성능 통계를 반환하는 메서드"""
+        if hasattr(self, 'cache_manager'):
+            return self.cache_manager.get_performance_stats()
+        return None
+    
+    def log_cache_performance(self):
+        """캐시 성능 통계를 로그에 기록 (고성능 버전)"""
+        if hasattr(self, 'cache_manager'):
+            try:
+                cache_stats = self.cache_manager.get_performance_stats()
+                
+                logger.info("=== 고성능 캐시 성능 통계 ===")
+                logger.info(f"전체 캐시 적중률: {cache_stats['overall_hit_rate']:.1f}%")
+                logger.info(f"총 요청 수: {cache_stats['total_requests']}")
+                logger.info(f"거리 계산 수: {cache_stats['distance_calculations']}")
+                logger.info(f"차량 쿼리 수: {cache_stats['vehicle_queries']}")
+                
+                # 성능 요약
+                performance = cache_stats.get('performance_summary', {})
+                logger.info(f"캐시 효율성: {performance.get('cache_efficiency', 0):.1f}%")
+                logger.info(f"메모리 사용률: {performance.get('memory_usage', 0):.1f}%")
+                logger.info(f"평균 접근 횟수: {performance.get('avg_access_per_entry', 0):.1f}")
+                
+                # 거리 캐시 상세 통계
+                distance_cache = cache_stats.get('distance_cache', {})
+                logger.info(f"거리 캐시 엔트리: {distance_cache.get('entries', 0)}")
+                logger.info(f"차량 캐시 프레임: {cache_stats.get('vehicle_cache_frames', 0)}")
+                
+                logger.info("========================")
+                
+            except Exception as e:
+                logger.error(f"캐시 성능 통계 로그 중 오류: {str(e)}")
 
     def analyze_tracked_objects(self, frame, tracked_objects, yolo_boxes):
         roi_x1 = self.roi_x
@@ -1185,10 +1482,23 @@ class VideoThread(QThread):
                 
                 try:
                     # DetectionStrategyManager를 사용한 전략 검사
+                    # 캐시 관리자를 config에 임시로 추가하여 전략들이 사용할 수 있도록 함
+                    if hasattr(self, 'cache_manager'):
+                        config_with_cache = type(self.config)()
+                        # 기존 config 속성들 복사
+                        for attr_name in dir(self.config):
+                            if not attr_name.startswith('_'):
+                                setattr(config_with_cache, attr_name, getattr(self.config, attr_name))
+                        # 캐시 관리자 추가
+                        config_with_cache.cache_manager = self.cache_manager
+                        config_to_use = config_with_cache
+                    else:
+                        config_to_use = self.config
+                    
                     strategy_results = self.strategy_manager.check_strategies(
                         frame=frame,
                         tracking_info=self.object_movements[obj_id]["trajectory"],
-                        config=self.config,
+                        config=config_to_use,
                         vehicle_info=vehicle_info
                     )
                     
@@ -1264,16 +1574,33 @@ class VideoThread(QThread):
         return falling_count >= int(0.8 * (len(positions) - 1))
 
     def check_vehicle_distance(self, obj_center, vehicle_info):
-        """객체가 차량 근처에 있는지 확인하는 함수"""
-        if not vehicle_info:
+        """객체가 차량 근처에 있는지 확인하는 함수 (고성능 캐시 최적화 적용)"""
+        if not vehicle_info and hasattr(self, 'cache_manager'):
+            # 차량 정보가 없을 때 캐시에서 조회
+            current_frame = getattr(self, 'current_frame_index', 0)
+            return self.cache_manager.check_vehicle_distance(
+                obj_center=obj_center,
+                max_distance=self.config.distance_trash,
+                frame_index=current_frame
+            )
+        elif vehicle_info:
+            # 차량 정보가 있을 때는 고성능 캐시를 사용한 거리 계산
+            min_distance = float('inf')
+            
+            if hasattr(self, 'cache_manager'):
+                # 고성능 캐시를 사용한 거리 계산
+                for vehicle in vehicle_info:
+                    veh_center = vehicle['center']
+                    dist = self.cache_manager.get_optimized_distance(obj_center, veh_center)
+                    min_distance = min(min_distance, dist)
+            else:
+                # 기존 방식의 거리 계산
+                for vehicle in vehicle_info:
+                    veh_center = vehicle['center']
+                    dist = math.sqrt((obj_center[0] - veh_center[0]) ** 2 + (obj_center[1] - veh_center[1]) ** 2)
+                    min_distance = min(min_distance, dist)
+        else:
             return False
-
-        min_distance = float('inf')
-
-        for vehicle in vehicle_info:
-            veh_center = vehicle['center']
-            dist = math.sqrt((obj_center[0] - veh_center[0]) ** 2 + (obj_center[1] - veh_center[1]) ** 2)
-            min_distance = min(min_distance, dist)
 
         # 설정된 거리 임계값보다 가까우면 True
         return min_distance <= self.config.distance_trash
@@ -1420,6 +1747,14 @@ class VideoThread(QThread):
 
         # 현재 프레임의 차량만 유지
         self.vehicle_tracking = current_vehicles
+        
+        # 캐시 관리자에 차량 정보 업데이트
+        if hasattr(self, 'cache_manager'):
+            self.cache_manager.update_vehicles(
+                frame_index=getattr(self, 'current_frame_index', 0),
+                yolo_boxes=yolo_boxes,
+                roi_offset=(roi_x, roi_y)
+            )
 
         return yolo_boxes
 
@@ -1532,7 +1867,7 @@ class VideoThread(QThread):
 
     def link_violation_with_vehicle(self, obj_id, litter_center, litter_width):
         """
-        쓰레기 투기 객체를 주변 차량과 연결하는 함수
+        쓰레기 투기 객체를 주변 차량과 연결하는 함수 (캐시 최적화 적용)
 
         Args:
             obj_id: 쓰레기 객체 ID
@@ -1543,10 +1878,16 @@ class VideoThread(QThread):
             vehicle_left_mid = (center[0] - litter_width // 2, center[1])
             vehicle_right_mid = (center[0] + litter_width // 2, center[1])
 
-            distance1 = math.sqrt((litter_center[0] - vehicle_left_mid[0]) ** 2 +
-                                  (litter_center[1] - vehicle_left_mid[1]) ** 2)
-            distance2 = math.sqrt((litter_center[0] - vehicle_right_mid[0]) ** 2 +
-                                  (litter_center[1] - vehicle_right_mid[1]) ** 2)
+            # 캐시를 사용한 거리 계산
+            if hasattr(self, 'cache_manager'):
+                distance1 = self.cache_manager.get_optimized_distance(litter_center, vehicle_left_mid)
+                distance2 = self.cache_manager.get_optimized_distance(litter_center, vehicle_right_mid)
+            else:
+                # 기존 방식의 거리 계산
+                distance1 = math.sqrt((litter_center[0] - vehicle_left_mid[0]) ** 2 +
+                                      (litter_center[1] - vehicle_left_mid[1]) ** 2)
+                distance2 = math.sqrt((litter_center[0] - vehicle_right_mid[0]) ** 2 +
+                                      (litter_center[1] - vehicle_right_mid[1]) ** 2)
 
             if distance1 <= self.config.distance_trash or distance2 <= self.config.distance_trash:
                 logger.info(f"Vehicle ID: {vid}, Distance1: {distance1}, Distance2: {distance2}")

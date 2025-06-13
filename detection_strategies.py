@@ -136,7 +136,7 @@ class VehicleDistanceStrategy(DetectionStrategy):
         return "선정된 오브젝트와 차량 사이의 간격이 일정 범위 이내인지 확인"
 
     def check(self, frame, tracking_info, config, vehicle_info=None):
-        """차량과 쓰레기 객체 간의 연관성 확인"""
+        """차량과 쓰레기 객체 간의 연관성 확인 (캐시 최적화 적용)"""
         logger.debug(
             f"\n🚗 [{self.name()}] 전략 검사 시작: tracking_info={len(tracking_info) if tracking_info else 0}, vehicle_info={len(vehicle_info) if vehicle_info else 0}")
 
@@ -149,9 +149,17 @@ class VehicleDistanceStrategy(DetectionStrategy):
         obj_center_x = (obj_bbox[0] + obj_bbox[2]) / 2
         obj_center_y = (obj_bbox[1] + obj_bbox[3]) / 2
 
-        # 각 차량과의 거리 계산
+        # 각 차량과의 거리 계산 - 캐시 활용 가능 여부 확인
         min_distance = float('inf')
         closest_edge = None
+        
+        # 프레임에서 캐시 관리자에 접근 시도
+        cache_manager = None
+        if hasattr(config, 'cache_manager'):
+            cache_manager = config.cache_manager
+        # 또는 전역 변수로 접근 시도 (processing.py에서 설정)
+        elif hasattr(frame, 'cache_manager'):
+            cache_manager = frame.cache_manager
 
         for vehicle in vehicle_info:
             veh_bbox = vehicle['bbox']  # (x1, y1, x2, y2)
@@ -179,14 +187,21 @@ class VehicleDistanceStrategy(DetectionStrategy):
             else:
                 y_distance = 0
 
-            # 최종 거리 계산 (x, y 중 하나라도 0이면 다른 하나만 사용)
+            # 최종 거리 계산 - 캐시 활용
             if x_distance == 0:
                 distance = y_distance
             elif y_distance == 0:
                 distance = x_distance
             else:
-                # 둘 다 0이 아니면 유클리드 거리 계산
-                distance = math.sqrt(x_distance ** 2 + y_distance ** 2)
+                # 캐시를 활용한 유클리드 거리 계산
+                if cache_manager and hasattr(cache_manager, 'get_optimized_distance'):
+                    distance = cache_manager.get_optimized_distance(
+                        (obj_center_x, obj_center_y), 
+                        (obj_center_x - x_distance, obj_center_y - y_distance)
+                    )
+                else:
+                    # 기존 방식의 거리 계산
+                    distance = math.sqrt(x_distance ** 2 + y_distance ** 2)
 
             # 디버깅 로그
             logger.debug(
@@ -514,6 +529,7 @@ class VehicleAssociationStrategy(DetectionStrategy):
         return "쓰레기 객체가 특정 차량과 연관되어 있는지 확인"
 
     def check(self, frame, tracking_info, config, vehicle_info=None):
+        """차량-객체 연관성 확인 (캐시 최적화 적용)"""
         logger.debug(
             f"[{self.name()}] 전략 검사 시작: tracking_info={len(tracking_info) if tracking_info else 0}, vehicle_info={len(vehicle_info) if vehicle_info else 0}")
 
@@ -523,12 +539,24 @@ class VehicleAssociationStrategy(DetectionStrategy):
 
         # 가장 최근 위치
         last_pos = tracking_info[-1]['center']
+        
+        # 캐시 관리자 접근 시도
+        cache_manager = None
+        if hasattr(config, 'cache_manager'):
+            cache_manager = config.cache_manager
 
         # 각 차량과의 거리 계산
         distances = []
         for vehicle in vehicle_info:
             veh_center = vehicle['center']
-            dist = math.sqrt((last_pos[0] - veh_center[0]) ** 2 + (last_pos[1] - veh_center[1]) ** 2)
+            
+            # 캐시를 활용한 거리 계산
+            if cache_manager and hasattr(cache_manager, 'get_optimized_distance'):
+                dist = cache_manager.get_optimized_distance(last_pos, veh_center)
+            else:
+                # 기존 방식의 거리 계산
+                dist = math.sqrt((last_pos[0] - veh_center[0]) ** 2 + (last_pos[1] - veh_center[1]) ** 2)
+            
             distances.append(dist)
 
         # 가장 가까운 차량과의 거리

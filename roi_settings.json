@@ -1,8 +1,8 @@
 {
-    "roi_x": 561,
-    "roi_y": 135,
-    "roi_width": 1747,
-    "roi_height": 1251,
+    "roi_x": 963,
+    "roi_y": 174,
+    "roi_width": 710,
+    "roi_height": 608,
     "min_size": 100,
     "max_size": 400
 }
