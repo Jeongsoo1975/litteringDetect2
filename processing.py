@@ -73,7 +73,7 @@ def load_model_with_spinner(model_path="yolov8n.pt"):
 
 
 ##########################
-# 설정 파일 관리 함수들
+# 설정 파일 관리 함수들 (안전한 로깅 포함)
 ##########################
 def load_settings_from_file(file_path="default_settings.txt"):
     """설정 파일에서 설정값을 로드하는 함수"""
@@ -100,14 +100,26 @@ def load_settings_from_file(file_path="default_settings.txt"):
                     else:
                         settings[key] = value
         
-        logger.info(f"설정 파일 로드 성공: {file_path}")
-        logger.info(f"로드된 설정값: {settings}")
+        # logger가 정의되어 있으면 사용, 아니면 print 사용
+        try:
+            logger.info(f"설정 파일 로드 성공: {file_path}")
+            logger.info(f"로드된 설정값: {settings}")
+        except NameError:
+            print(f"설정 파일 로드 성공: {file_path}")
+            print(f"로드된 설정값: {settings}")
+        
         return settings
     except FileNotFoundError:
-        logger.warning(f"설정 파일이 없습니다: {file_path}. 기본값을 사용합니다.")
+        try:
+            logger.warning(f"설정 파일이 없습니다: {file_path}. 기본값을 사용합니다.")
+        except NameError:
+            print(f"경고: 설정 파일이 없습니다: {file_path}. 기본값을 사용합니다.")
         return {}
     except Exception as e:
-        logger.error(f"설정 파일 로드 중 오류: {str(e)}")
+        try:
+            logger.error(f"설정 파일 로드 중 오류: {str(e)}")
+        except NameError:
+            print(f"오류: 설정 파일 로드 중 오류: {str(e)}")
         return {}
 
 def save_settings_to_file(config, file_path="default_settings.txt"):
@@ -158,10 +170,16 @@ output_dir={config.output_dir}
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
         
-        logger.info(f"설정 파일 저장 완료: {file_path}")
+        try:
+            logger.info(f"설정 파일 저장 완료: {file_path}")
+        except NameError:
+            print(f"설정 파일 저장 완료: {file_path}")
         
     except Exception as e:
-        logger.error(f"설정 파일 저장 중 오류: {str(e)}")
+        try:
+            logger.error(f"설정 파일 저장 중 오류: {str(e)}")
+        except NameError:
+            print(f"오류: 설정 파일 저장 중 오류: {str(e)}")
 
 ##########################
 # 설정 클래스
@@ -200,7 +218,10 @@ class Config:
         for key, value in settings.items():
             if hasattr(self, key):
                 setattr(self, key, value)
-                logger.debug(f"설정 업데이트: {key} = {value}")
+                try:
+                    logger.debug(f"설정 업데이트: {key} = {value}")
+                except NameError:
+                    pass  # logger가 없으면 무시
     
     def save_to_file(self, file_path="default_settings.txt"):
         """현재 설정값을 파일에 저장"""
