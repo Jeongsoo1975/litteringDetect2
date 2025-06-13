@@ -1231,10 +1231,9 @@ class VideoThread(QThread):
                 count = self.object_movements[obj_id].get("count", 0)
                 min_frames = self.config.min_frame_count_for_violation
                 
-                # ID 398 특별 처리 - 임계값을 3으로 낮춤 (빠른 테스트)
+                # ID 398 특별 처리 - 원래 임계값 사용하되 중력 전략이 더 엄격해짐
                 if obj_id == 398:
-                    min_frames = 3
-                    logger.info(f"[TEST] ID 398 특별 처리 - 임계값을 {min_frames}로 낮춤")
+                    logger.info(f"[TEST] ID 398 특별 처리 - 중력 방향 전략이 최소 5개 궤적 요구")
                 
                 # 모든 객체에 대해 기본 디버깅 정보 출력 (임계값 관계없이)
                 if self.config.debug_detection:

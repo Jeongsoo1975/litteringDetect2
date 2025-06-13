@@ -220,9 +220,9 @@ class GravityDirectionStrategy(DetectionStrategy):
     def check(self, frame, tracking_info, config, vehicle_info=None):
         logger.debug(f"\n⬇️ [{self.name()}] 전략 검사 시작: tracking_info={len(tracking_info) if tracking_info else 0}")
 
-        # 최소 프레임 수 확인 (최소 2개 필요)
-        if len(tracking_info) < 2:
-            logger.debug(f"[{self.name()}] 추적 정보 부족 (최소 2개 필요) - 배제")
+        # 최소 프레임 수 확인 (최소 5개 필요 - 신뢰할 수 있는 궤적을 위해)
+        if len(tracking_info) < 5:
+            logger.debug(f"[{self.name()}] 추적 정보 부족 (최소 5개 필요, 현재: {len(tracking_info)}) - 배제")
             return False
 
         # 전체 궤적에서 y 방향 이동 확인 (모든 프레임 검사)
@@ -244,7 +244,7 @@ class GravityDirectionStrategy(DetectionStrategy):
         total_moves = len(y_movements)
         
         # 전체 이동 중 최소 80% 이상이 실제 하강 움직임이어야 함 (기준 강화)
-        min_downward_ratio = 0.8  # 50% -> 80%로 강화
+        min_downward_ratio = 0.8  # 80% 기준 유지
         downward_ratio = downward_moves / total_moves if total_moves > 0 else 0
         
         result = downward_ratio >= min_downward_ratio and downward_moves >= 1
