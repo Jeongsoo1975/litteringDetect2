@@ -379,7 +379,7 @@ class DetectionStrategyManager:
 
     def check_strategies(self, frame, tracking_info, config, vehicle_info=None):
         """
-        모든 활성화된 전략 확인
+        모든 활성화된 전략 확인 - 성능 최적화된 버전
 
         Args:
             frame: 현재 프레임
@@ -392,26 +392,73 @@ class DetectionStrategyManager:
         """
         logger.debug(f"전략 검사 시작: 활성화된 전략 수={len(self.enabled_strategies)}")
 
+        # 성능 최적화를 위한 전략 우선순위 정의 (빠른 전략부터 실행)
+        strategy_priority = {
+            'size_range': 1,          # 가장 빠른 전략 (단순 면적 계산)
+            'vehicle_overlap': 2,     # 두 번째로 빠른 전략 (간단한 교차 영역 계산)
+            'gravity_direction': 3,   # 중간 속도 (궤적 분석)
+            'direction_alignment': 4, # 상대적으로 느림 (복잡한 방향 계산)
+            'vehicle_distance': 5,    # 느림 (거리 계산이 많음)
+            'vehicle_association': 6  # 가장 느림 (복잡한 연관성 분석)
+        }
+
         # 카테고리별 전략 (추가/수정 가능)
         required_strategies = ['size_range', 'gravity_direction']  # 필수 전략
         optional_strategies = ['vehicle_distance', 'direction_alignment', 'vehicle_overlap']  # 선택적 전략
 
-        results = {}
+        # 활성화된 전략을 우선순위에 따라 정렬
+        enabled_strategy_list = list(self.enabled_strategies)
+        enabled_strategy_list.sort(key=lambda x: strategy_priority.get(x, 999))
 
-        # 각 전략 실행
-        for strategy_id in self.enabled_strategies:
+        results = {}
+        early_termination = False
+
+        # 각 전략을 우선순위 순서로 실행
+        for strategy_id in enabled_strategy_list:
             if strategy_id in self.strategies:
                 strategy = self.strategies[strategy_id]
                 try:
                     result = strategy.check(frame, tracking_info, config, vehicle_info)
                     results[strategy_id] = result
                     logger.debug(f"전략 '{strategy_id}' ({strategy.name()}) 결과: {result}")
+                    
+                    # ALL 모드에서 조기 종료 로직
+                    if config.detection_logic == "ALL" and not result:
+                        logger.debug(f"🚀 조기 종료: '{strategy_id}' 전략 실패로 인한 ALL 모드 조기 중단")
+                        early_termination = True
+                        # 나머지 전략들은 실행하지 않고 False로 설정
+                        for remaining_strategy in enabled_strategy_list:
+                            if remaining_strategy not in results:
+                                results[remaining_strategy] = False
+                        break
+                        
                 except Exception as e:
                     logger.error(f"전략 '{strategy_id}' ({strategy.name()}) 실행 중 오류: {str(e)}")
                     logger.error(traceback.format_exc())
                     results[strategy_id] = False  # 오류 발생 시 기본값 False
+                    
+                    # ALL 모드에서 오류도 실패로 간주하여 조기 종료
+                    if config.detection_logic == "ALL":
+                        logger.debug(f"🚀 조기 종료: '{strategy_id}' 전략 오류로 인한 ALL 모드 조기 중단")
+                        early_termination = True
+                        # 나머지 전략들은 실행하지 않고 False로 설정
+                        for remaining_strategy in enabled_strategy_list:
+                            if remaining_strategy not in results:
+                                results[remaining_strategy] = False
+                        break
             else:
                 logger.warning(f"존재하지 않는 전략 ID: {strategy_id}")
+                results[strategy_id] = False
+                
+                # ALL 모드에서 존재하지 않는 전략도 실패로 간주
+                if config.detection_logic == "ALL":
+                    logger.debug(f"🚀 조기 종료: 존재하지 않는 전략 '{strategy_id}'로 인한 ALL 모드 조기 중단")
+                    early_termination = True
+                    # 나머지 전략들은 실행하지 않고 False로 설정
+                    for remaining_strategy in enabled_strategy_list:
+                        if remaining_strategy not in results:
+                            results[remaining_strategy] = False
+                    break
 
         # 결과 집계 및 최종 판정
         if config.detection_logic == "ANY":
@@ -421,7 +468,10 @@ class DetectionStrategyManager:
         elif config.detection_logic == "ALL":
             # 모두 True면 성공
             final_result = all(results.values()) if results else False
-            logic_description = "AND 로직 (모두 통과)"
+            if early_termination:
+                logic_description = "AND 로직 (조기 종료됨)"
+            else:
+                logic_description = "AND 로직 (모두 통과)"
         elif config.detection_logic == "SMART":
             # 필수 전략은 모두 충족해야 하고, 선택적 전략은 하나 이상 충족해야 함
             required_results = [results.get(strategy_id, False) for strategy_id in required_strategies
@@ -440,9 +490,17 @@ class DetectionStrategyManager:
             final_result = all(results.values()) if results else False
             logic_description = "기본 AND 로직 (모두 통과)"
 
+        # 성능 정보 추가 로깅
+        executed_strategies = sum(1 for result in results.values() if result is not False or not early_termination)
+        total_strategies = len(self.enabled_strategies)
+        
         # 최종 결과 로깅
         result_icon = "✅" if final_result else "❌"
-        logger.debug(f"\n🏁 ========== 최종 판정 결과 ==========\n{result_icon} 전체 전략 검사 결과: {final_result}\n📋 {logic_description}\n📊 상세 결과: {results}\n{'='*50}\n")
+        performance_info = f"⚡ 성능: {executed_strategies}/{total_strategies} 전략 실행"
+        if early_termination:
+            performance_info += " (조기 종료)"
+            
+        logger.debug(f"\n🏁 ========== 최종 판정 결과 ==========\n{result_icon} 전체 전략 검사 결과: {final_result}\n📋 {logic_description}\n{performance_info}\n📊 상세 결과: {results}\n{'='*50}\n")
 
         return results
 
