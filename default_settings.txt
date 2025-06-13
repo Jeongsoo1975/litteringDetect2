@@ -4,7 +4,7 @@
 
 # 객체 크기 설정 (픽셀 단위)
 min_size=50
-max_size=300
+max_size=400
 
 # YOLO 설정
 yolo_confidence_value=0.35
