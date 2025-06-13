@@ -73,40 +73,138 @@ def load_model_with_spinner(model_path="yolov8n.pt"):
 
 
 ##########################
+# 설정 파일 관리 함수들
+##########################
+def load_settings_from_file(file_path="default_settings.txt"):
+    """설정 파일에서 설정값을 로드하는 함수"""
+    settings = {}
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                # 주석과 빈 줄 건너뛰기
+                if not line or line.startswith('#'):
+                    continue
+                
+                # key=value 형식 파싱
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    key = key.strip()
+                    value = value.strip()
+                    
+                    # 데이터 타입 변환
+                    if value.lower() in ['true', 'false']:
+                        settings[key] = value.lower() == 'true'
+                    elif value.replace('.', '', 1).isdigit():  # 숫자 (int 또는 float)
+                        settings[key] = float(value) if '.' in value else int(value)
+                    else:
+                        settings[key] = value
+        
+        logger.info(f"설정 파일 로드 성공: {file_path}")
+        logger.info(f"로드된 설정값: {settings}")
+        return settings
+    except FileNotFoundError:
+        logger.warning(f"설정 파일이 없습니다: {file_path}. 기본값을 사용합니다.")
+        return {}
+    except Exception as e:
+        logger.error(f"설정 파일 로드 중 오류: {str(e)}")
+        return {}
+
+def save_settings_to_file(config, file_path="default_settings.txt"):
+    """현재 설정값을 파일에 저장하는 함수"""
+    try:
+        content = f"""# LitteringDetect2 기본 설정값
+# 이 파일은 프로그램 시작 시 자동으로 로드됩니다.
+# 각 설정값을 수정한 후 프로그램을 재시작하면 새로운 값이 적용됩니다.
+
+# 객체 크기 설정 (픽셀 단위)
+min_size={config.min_size}
+max_size={config.max_size}
+
+# YOLO 설정
+yolo_confidence_value={config.yolo_confidence_value}
+batch_size={config.batch_size}
+
+# 거리 설정 (픽셀 단위)
+distance_trash={config.distance_trash}
+gravity_direction_threshold={config.gravity_direction_threshold}
+horizontal_direction_threshold={config.horizontal_direction_threshold}
+max_vehicle_distance={config.max_vehicle_distance}
+
+# 차량 겹침 임계값 (비율, 0.0-1.0)
+vehicle_overlap_threshold={config.vehicle_overlap_threshold}
+
+# 위반 판정을 위한 최소 프레임 카운트
+min_frame_count_for_violation={config.min_frame_count_for_violation}
+
+# 감지 로직 ("ANY": 어느 하나라도 충족, "ALL": 모두 충족)
+detection_logic={config.detection_logic}
+
+# 디버깅 설정 (true/false)
+debug_detection={str(config.debug_detection).lower()}
+
+# 성능 모니터링 설정
+performance_monitoring={str(config.performance_monitoring).lower()}
+target_fps={config.target_fps}
+max_gpu_memory_percent={config.max_gpu_memory_percent}
+max_cpu_percent={config.max_cpu_percent}
+performance_warning_threshold={config.performance_warning_threshold}
+performance_log_interval={config.performance_log_interval}
+
+# 출력 디렉토리
+output_dir={config.output_dir}
+"""
+        
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        logger.info(f"설정 파일 저장 완료: {file_path}")
+        
+    except Exception as e:
+        logger.error(f"설정 파일 저장 중 오류: {str(e)}")
+
+##########################
 # 설정 클래스
 ##########################
 class Config:
     def __init__(self):
-        # 기존 설정
-        self.min_size = 50  # 30에서 50으로 변경
+        # 기본값 설정
+        self.min_size = 50
         self.max_size = 300
         self.yolo_confidence_value = 0.35
-        self.gravity_direction_threshold = 7  # 중력 방향 임계값
+        self.gravity_direction_threshold = 7
         self.batch_size = 4
         self.output_dir = "output"
-        self.distance_trash = 300  # 300으로 수정
-
-        # 카운트 충족 여부를 위한 변수 추가
-        self.min_frame_count_for_violation = 7  # 위반 판정을 위한 최소 프레임 카운트
-
-        # 새로운 전략 관련 설정
-        self.horizontal_direction_threshold = 5  # 수평 이동 임계값
-        self.vehicle_overlap_threshold = 0.01  # 차량 겹침 비율 임계값 (1%로 변경 - 약간이라도 겹치면 배제)
-        self.max_vehicle_distance = 200  # 차량과 오브젝트 간 최대 거리 (픽셀)
-
-        # 감지 로직 설정
-        self.detection_logic = "ALL"  # "ANY": 어느 하나라도 충족, "ALL": 모두 충족
-
-        # 디버깅 관련 설정 추가
-        self.debug_detection = False  # 객체 검출 디버깅 비활성화 (True에서 False로 변경)
+        self.distance_trash = 300
+        self.min_frame_count_for_violation = 7
+        self.horizontal_direction_threshold = 5
+        self.vehicle_overlap_threshold = 0.01
+        self.max_vehicle_distance = 200
+        self.detection_logic = "ALL"
+        self.debug_detection = False
+        self.performance_monitoring = True
+        self.target_fps = 15.0
+        self.max_gpu_memory_percent = 80.0
+        self.max_cpu_percent = 70.0
+        self.performance_warning_threshold = 0.8
+        self.performance_log_interval = 5
         
-        # 성능 최적화 관련 설정 추가
-        self.performance_monitoring = True  # 성능 모니터링 활성화
-        self.target_fps = 15.0  # 목표 FPS
-        self.max_gpu_memory_percent = 80.0  # 최대 GPU 메모리 사용률 (%)
-        self.max_cpu_percent = 70.0  # 최대 CPU 사용률 (%)
-        self.performance_warning_threshold = 0.8  # 성능 경고 임계값 (목표 대비 비율)
-        self.performance_log_interval = 5  # 성능 로그 기록 간격 (초)
+        # 설정 파일에서 값 로드
+        self.load_from_file()
+    
+    def load_from_file(self, file_path="default_settings.txt"):
+        """설정 파일에서 값을 로드하여 현재 인스턴스에 적용"""
+        settings = load_settings_from_file(file_path)
+        
+        # 로드된 설정값으로 현재 인스턴스 업데이트
+        for key, value in settings.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+                logger.debug(f"설정 업데이트: {key} = {value}")
+    
+    def save_to_file(self, file_path="default_settings.txt"):
+        """현재 설정값을 파일에 저장"""
+        save_settings_to_file(self, file_path)
 
 
 # Config 객체 생성
@@ -115,25 +213,38 @@ config = Config()
 
 def update_config(new_config):
     """
-    외부(예: ui.py)에서 전달받은 설정값을 글로벌 config에 반영.
+    외부(예: ui.py)에서 전달받은 설정값을 글로벌 config에 반영하고 파일에 저장.
     """
     global config
     try:
+        # 기존 설정값 업데이트
         config.min_size = new_config.min_size
         config.max_size = new_config.max_size
         config.yolo_confidence_value = new_config.yolo_confidence_value
         config.gravity_direction_threshold = new_config.gravity_direction_threshold
         config.distance_trash = new_config.distance_trash
         config.batch_size = new_config.batch_size
+        config.detection_logic = new_config.detection_logic
+        config.horizontal_direction_threshold = getattr(new_config, 'horizontal_direction_threshold', 5)
+        config.max_vehicle_distance = getattr(new_config, 'max_vehicle_distance', 200)
+        config.debug_detection = new_config.debug_detection
 
-        logger.info("Config 업데이트 완료:")
+        # 설정 파일에 저장
+        config.save_to_file()
+
+        logger.info("Config 업데이트 및 파일 저장 완료:")
         logger.info(f"min_size={config.min_size}, max_size={config.max_size}, "
                     f"yolo_confidence={config.yolo_confidence_value}, "
                     f"gravity_direction_threshold={config.gravity_direction_threshold}, "
                     f"distance_trash={config.distance_trash}, "
-                    f"batch_size={config.batch_size}")
+                    f"batch_size={config.batch_size}, "
+                    f"detection_logic={config.detection_logic}, "
+                    f"horizontal_threshold={config.horizontal_direction_threshold}, "
+                    f"max_vehicle_distance={config.max_vehicle_distance}, "
+                    f"debug_detection={config.debug_detection}")
     except Exception as e:
         logger.error(f"설정 업데이트 중 오류 발생: {str(e)}")
+        logger.error(traceback.format_exc())
 
 
 ##########################

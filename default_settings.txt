@@ -1,0 +1,40 @@
+# LitteringDetect2 기본 설정값
+# 이 파일은 프로그램 시작 시 자동으로 로드됩니다.
+# 각 설정값을 수정한 후 프로그램을 재시작하면 새로운 값이 적용됩니다.
+
+# 객체 크기 설정 (픽셀 단위)
+min_size=50
+max_size=300
+
+# YOLO 설정
+yolo_confidence_value=0.35
+batch_size=4
+
+# 거리 설정 (픽셀 단위)
+distance_trash=300
+gravity_direction_threshold=7
+horizontal_direction_threshold=5
+max_vehicle_distance=200
+
+# 차량 겹침 임계값 (비율, 0.0-1.0)
+vehicle_overlap_threshold=0.01
+
+# 위반 판정을 위한 최소 프레임 카운트
+min_frame_count_for_violation=7
+
+# 감지 로직 ("ANY": 어느 하나라도 충족, "ALL": 모두 충족)
+detection_logic=ALL
+
+# 디버깅 설정 (true/false)
+debug_detection=false
+
+# 성능 모니터링 설정
+performance_monitoring=true
+target_fps=15.0
+max_gpu_memory_percent=80.0
+max_cpu_percent=70.0
+performance_warning_threshold=0.8
+performance_log_interval=5
+
+# 출력 디렉토리
+output_dir=output
