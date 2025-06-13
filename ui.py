@@ -662,9 +662,8 @@ class DetectionApp(QWidget):
                 f"초기화된 ROI 값: x={self.roi_x}, y={self.roi_y}, width={self.roi_width}, height={self.roi_height}, "
                 f"min_size={self.min_size}, max_size={self.max_size}"
             )
-            # 설정값을 Config에 반영
-            self.config.min_size = self.min_size
-            self.config.max_size = self.max_size
+            # ROI 설정에서 로드된 min_size, max_size는 지역변수로만 사용
+            # Config 객체는 default_settings.txt에서 로드된 값을 유지
         except Exception as e:
             logger.error(f"ROI 설정 로드 실패: {str(e)}")
             self.roi_x, self.roi_y, self.roi_width, self.roi_height = 0, 300, 800, 150
