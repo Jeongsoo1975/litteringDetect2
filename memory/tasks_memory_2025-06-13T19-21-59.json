@@ -1,0 +1,63 @@
+{
+  "tasks": [
+    {
+      "id": "f09bf6fd-97f7-4709-95b8-38906f833a8f",
+      "name": "성능 측정 도구 및 벤치마크 기준 구현",
+      "description": "현재 시스템의 성능을 정확히 측정하고 최적화 효과를 검증하기 위한 측정 도구를 구현합니다. FPS, GPU 메모리 사용률, CPU 사용률, 처리 지연시간 등의 실시간 모니터링 기능을 추가하고, 성능 벤치마크 기준을 설정합니다.",
+      "notes": "기존 로깅 시스템과 통합하되 성능에 영향을 주지 않도록 최소한의 오버헤드로 구현",
+      "status": "completed",
+      "dependencies": [],
+      "createdAt": "2025-06-13T17:13:49.490Z",
+      "updatedAt": "2025-06-13T17:18:06.540Z",
+      "relatedFiles": [
+        {
+          "path": "processing.py",
+          "type": "TO_MODIFY",
+          "description": "PerformanceMonitor 클래스 추가 및 VideoThread 통합",
+          "lineStart": 1,
+          "lineEnd": 50
+        },
+        {
+          "path": "LOG/performance_benchmark.log",
+          "type": "CREATE",
+          "description": "성능 측정 결과 저장 파일",
+          "lineStart": 1,
+          "lineEnd": 1
+        }
+      ],
+      "implementationGuide": "processing.py에 PerformanceMonitor 클래스를 추가하여 실시간 성능 지표 수집, config.py에 성능 임계값 설정 추가, 성능 로그를 별도 파일로 저장하는 기능 구현",
+      "verificationCriteria": "FPS, GPU 메모리, CPU 사용률이 실시간으로 측정되고 로그에 기록되며, 성능 저하 시 경고가 출력되는지 확인",
+      "analysisResult": "쓰레기 감지 시스템의 성능 최적화: 감지 정확도(False Positive ≤5%, False Negative ≤10%)를 유지하면서 실시간 처리 성능(≥15 FPS, GPU 메모리 ≤80%, CPU ≤70%)을 달성하기 위해 전략 실행 최적화, 로깅 최적화, GPU 메모리 관리, 스레드 동기화 개선을 통한 성능 병목 해결",
+      "summary": "PerformanceMonitor 클래스 구현 완료: FPS, GPU 메모리, CPU 사용률 등 실시간 성능 지표 수집 및 로깅 기능 구현. Config 클래스에 성능 임계값 설정 추가. VideoThread와 성능 모니터링 통합. 성능 벤치마크 로그 파일 생성 및 psutil 의존성 추가. 목표 성능 기준 설정 완료.",
+      "completedAt": "2025-06-13T17:18:06.539Z"
+    },
+    {
+      "id": "4f745a69-8525-4639-bf9e-9a6599c480ce",
+      "name": "전략 실행 순서 최적화 및 조기 종료 로직 구현",
+      "description": "DetectionStrategyManager에서 전략 실행 순서를 성능 기준으로 재배치하고, ALL 모드에서 첫 실패 시 즉시 중단하는 조기 종료 로직을 구현합니다. 빠른 전략(크기 범위, 차량 겹침)을 우선 실행하여 불필요한 연산을 제거합니다.",
+      "notes": "기존 전략 인터페이스는 변경하지 않고 실행 순서와 중단 로직만 최적화",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "f09bf6fd-97f7-4709-95b8-38906f833a8f"
+        }
+      ],
+      "createdAt": "2025-06-13T17:13:49.490Z",
+      "updatedAt": "2025-06-13T17:19:50.854Z",
+      "relatedFiles": [
+        {
+          "path": "detection_strategies.py",
+          "type": "TO_MODIFY",
+          "description": "DetectionStrategyManager 클래스의 check_strategies 메서드 최적화",
+          "lineStart": 200,
+          "lineEnd": 250
+        }
+      ],
+      "implementationGuide": "detection_strategies.py의 DetectionStrategyManager.check_strategies() 메서드에 전략 우선순위 정렬 로직 추가, ALL 모드에서 첫 False 반환 시 즉시 중단하는 조기 종료 로직 구현",
+      "verificationCriteria": "전략 실행 시간이 단축되고, ALL 모드에서 조기 종료가 정상 작동하며, 감지 정확도는 기존과 동일하게 유지되는지 확인",
+      "analysisResult": "쓰레기 감지 시스템의 성능 최적화: 감지 정확도(False Positive ≤5%, False Negative ≤10%)를 유지하면서 실시간 처리 성능(≥15 FPS, GPU 메모리 ≤80%, CPU ≤70%)을 달성하기 위해 전략 실행 최적화, 로깅 최적화, GPU 메모리 관리, 스레드 동기화 개선을 통한 성능 병목 해결",
+      "summary": "전략 실행 순서 최적화 및 조기 종료 로직을 성공적으로 구현했습니다. DetectionStrategyManager의 check_strategies() 메서드에 성능 기반 전략 우선순위 정렬(크기 범위 → 차량 겹침 → 중력 방향 → 방향 정렬 → 차량 거리 → 차량 연관성 순서)과 ALL 모드에서 첫 실패 시 즉시 중단하는 조기 종료 로직을 구현했습니다. 성능 지표 로깅도 추가하여 실행된 전략 수와 조기 종료 여부를 표시하도록 개선했습니다.",
+      "completedAt": "2025-06-13T17:19:50.853Z"
+    }
+  ]
+}

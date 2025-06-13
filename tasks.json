@@ -1,214 +1,97 @@
 {
   "tasks": [
     {
-      "id": "f09bf6fd-97f7-4709-95b8-38906f833a8f",
-      "name": "성능 측정 도구 및 벤치마크 기준 구현",
-      "description": "현재 시스템의 성능을 정확히 측정하고 최적화 효과를 검증하기 위한 측정 도구를 구현합니다. FPS, GPU 메모리 사용률, CPU 사용률, 처리 지연시간 등의 실시간 모니터링 기능을 추가하고, 성능 벤치마크 기준을 설정합니다.",
-      "notes": "기존 로깅 시스템과 통합하되 성능에 영향을 주지 않도록 최소한의 오버헤드로 구현",
+      "id": "77d8b582-72ea-4a34-9bcf-a314cbda0ddb",
+      "name": "ROI 설정 로드 시 Config 덮어쓰기 문제 해결",
+      "description": "DetectionApp.__init__() 메서드에서 load_roi_settings() 호출 후 self.config.min_size와 self.config.max_size를 덮어쓰는 코드를 제거하여 사용자가 설정한 값이 유지되도록 수정",
+      "notes": "기존 설정 저장/로드 메커니즘은 이미 올바르게 작동하므로 건드리지 않음. Config 클래스의 load_from_file() 메서드가 프로그램 시작 시 default_settings.txt에서 설정을 로드하므로 이 값을 덮어쓰면 안됨",
       "status": "completed",
       "dependencies": [],
-      "createdAt": "2025-06-13T17:13:49.490Z",
-      "updatedAt": "2025-06-13T17:18:06.540Z",
+      "createdAt": "2025-06-13T19:21:59.534Z",
+      "updatedAt": "2025-06-13T19:22:36.335Z",
       "relatedFiles": [
         {
-          "path": "processing.py",
+          "path": "C:\\Users\\USER\\Documents\\MCPData\\litteringDetect2\\ui.py",
           "type": "TO_MODIFY",
-          "description": "PerformanceMonitor 클래스 추가 및 VideoThread 통합",
-          "lineStart": 1,
-          "lineEnd": 50
-        },
-        {
-          "path": "LOG/performance_benchmark.log",
-          "type": "CREATE",
-          "description": "성능 측정 결과 저장 파일",
-          "lineStart": 1,
-          "lineEnd": 1
+          "description": "DetectionApp.__init__() 메서드에서 Config 덮어쓰기 코드 제거",
+          "lineStart": 650,
+          "lineEnd": 680
         }
       ],
-      "implementationGuide": "processing.py에 PerformanceMonitor 클래스를 추가하여 실시간 성능 지표 수집, config.py에 성능 임계값 설정 추가, 성능 로그를 별도 파일로 저장하는 기능 구현",
-      "verificationCriteria": "FPS, GPU 메모리, CPU 사용률이 실시간으로 측정되고 로그에 기록되며, 성능 저하 시 경고가 출력되는지 확인",
-      "analysisResult": "쓰레기 감지 시스템의 성능 최적화: 감지 정확도(False Positive ≤5%, False Negative ≤10%)를 유지하면서 실시간 처리 성능(≥15 FPS, GPU 메모리 ≤80%, CPU ≤70%)을 달성하기 위해 전략 실행 최적화, 로깅 최적화, GPU 메모리 관리, 스레드 동기화 개선을 통한 성능 병목 해결",
-      "summary": "PerformanceMonitor 클래스 구현 완료: FPS, GPU 메모리, CPU 사용률 등 실시간 성능 지표 수집 및 로깅 기능 구현. Config 클래스에 성능 임계값 설정 추가. VideoThread와 성능 모니터링 통합. 성능 벤치마크 로그 파일 생성 및 psutil 의존성 추가. 목표 성능 기준 설정 완료.",
-      "completedAt": "2025-06-13T17:18:06.539Z"
+      "implementationGuide": "ui.py의 DetectionApp.__init__() 메서드에서 다음 코드를 제거: \\n# 설정값을 Config에 반영\\nself.config.min_size = self.min_size\\nself.config.max_size = self.max_size\\n\\n대신 ROI 설정에서 로드된 min_size, max_size는 지역 변수로만 사용하고 Config 객체는 건드리지 않음",
+      "verificationCriteria": "1. UI에서 min_size 값을 변경하고 설정 저장 2. 프로그램 재시작 3. 설정 창에서 변경된 min_size 값이 올바르게 표시되는지 확인 4. default_settings.txt 파일에 변경된 값이 저장되었는지 확인",
+      "analysisResult": "Min size 설정값이 UI에서 변경해도 다음 프로그램 시작 시 반영되지 않는 문제를 해결. 분석 결과 설정 저장 메커니즘은 이미 올바르게 구현되어 있으나, DetectionApp 초기화 시 ROI 설정에서 min_size, max_size 값을 Config 객체에 덮어쓰는 것이 원인.",
+      "summary": "ROI 설정 로드 시 Config 덮어쓰기 문제가 성공적으로 해결되었습니다. DetectionApp.__init__() 메서드에서 load_roi_settings() 호출 후 self.config.min_size와 self.config.max_size를 덮어쓰는 코드를 제거하고, Config 객체가 default_settings.txt에서 로드된 값을 유지하도록 수정했습니다. 이제 UI에서 설정 변경 시 사용자가 입력한 값이 프로그램 재시작 후에도 올바르게 유지됩니다.",
+      "completedAt": "2025-06-13T19:22:36.335Z"
     },
     {
-      "id": "4f745a69-8525-4639-bf9e-9a6599c480ce",
-      "name": "전략 실행 순서 최적화 및 조기 종료 로직 구현",
-      "description": "DetectionStrategyManager에서 전략 실행 순서를 성능 기준으로 재배치하고, ALL 모드에서 첫 실패 시 즉시 중단하는 조기 종료 로직을 구현합니다. 빠른 전략(크기 범위, 차량 겹침)을 우선 실행하여 불필요한 연산을 제거합니다.",
-      "notes": "기존 전략 인터페이스는 변경하지 않고 실행 순서와 중단 로직만 최적화",
-      "status": "completed",
-      "dependencies": [
-        {
-          "taskId": "f09bf6fd-97f7-4709-95b8-38906f833a8f"
-        }
-      ],
-      "createdAt": "2025-06-13T17:13:49.490Z",
-      "updatedAt": "2025-06-13T17:19:50.854Z",
-      "relatedFiles": [
-        {
-          "path": "detection_strategies.py",
-          "type": "TO_MODIFY",
-          "description": "DetectionStrategyManager 클래스의 check_strategies 메서드 최적화",
-          "lineStart": 200,
-          "lineEnd": 250
-        }
-      ],
-      "implementationGuide": "detection_strategies.py의 DetectionStrategyManager.check_strategies() 메서드에 전략 우선순위 정렬 로직 추가, ALL 모드에서 첫 False 반환 시 즉시 중단하는 조기 종료 로직 구현",
-      "verificationCriteria": "전략 실행 시간이 단축되고, ALL 모드에서 조기 종료가 정상 작동하며, 감지 정확도는 기존과 동일하게 유지되는지 확인",
-      "analysisResult": "쓰레기 감지 시스템의 성능 최적화: 감지 정확도(False Positive ≤5%, False Negative ≤10%)를 유지하면서 실시간 처리 성능(≥15 FPS, GPU 메모리 ≤80%, CPU ≤70%)을 달성하기 위해 전략 실행 최적화, 로깅 최적화, GPU 메모리 관리, 스레드 동기화 개선을 통한 성능 병목 해결",
-      "summary": "전략 실행 순서 최적화 및 조기 종료 로직을 성공적으로 구현했습니다. DetectionStrategyManager의 check_strategies() 메서드에 성능 기반 전략 우선순위 정렬(크기 범위 → 차량 겹침 → 중력 방향 → 방향 정렬 → 차량 거리 → 차량 연관성 순서)과 ALL 모드에서 첫 실패 시 즉시 중단하는 조기 종료 로직을 구현했습니다. 성능 지표 로깅도 추가하여 실행된 전략 수와 조기 종료 여부를 표시하도록 개선했습니다.",
-      "completedAt": "2025-06-13T17:19:50.853Z"
-    },
-    {
-      "id": "a653303d-ca8c-415b-a283-e2918495be71",
-      "name": "차량 정보 캐싱 및 거리 계산 최적화",
-      "description": "반복적으로 계산되는 차량 정보와 거리 계산 결과를 프레임 단위로 캐싱하여 중복 연산을 제거합니다. 특히 VehicleDistanceStrategy와 VehicleAssociationStrategy에서 사용하는 거리 계산을 최적화합니다.",
-      "notes": "메모리 사용량이 과도하게 증가하지 않도록 이전 프레임 캐시는 자동 삭제",
-      "status": "in_progress",
-      "dependencies": [
-        {
-          "taskId": "4f745a69-8525-4639-bf9e-9a6599c480ce"
-        }
-      ],
-      "createdAt": "2025-06-13T17:13:49.490Z",
-      "updatedAt": "2025-06-13T17:20:30.040Z",
-      "relatedFiles": [
-        {
-          "path": "processing.py",
-          "type": "TO_MODIFY",
-          "description": "VideoThread 클래스에 캐싱 로직 추가",
-          "lineStart": 400,
-          "lineEnd": 450
-        },
-        {
-          "path": "detection_strategies.py",
-          "type": "TO_MODIFY",
-          "description": "거리 계산 전략들에 캐시 활용 로직 추가",
-          "lineStart": 100,
-          "lineEnd": 200
-        }
-      ],
-      "implementationGuide": "processing.py의 VideoThread 클래스에 frame_cache 딕셔너리 추가, 차량 중심점과 거리 계산 결과를 프레임 번호를 키로 캐싱, detection_strategies.py에서 캐시된 결과 활용",
-      "verificationCriteria": "동일한 프레임에서 중복 거리 계산이 제거되고, 전체 처리 시간이 단축되며, 메모리 사용량이 적정 수준을 유지하는지 확인",
-      "analysisResult": "쓰레기 감지 시스템의 성능 최적화: 감지 정확도(False Positive ≤5%, False Negative ≤10%)를 유지하면서 실시간 처리 성능(≥15 FPS, GPU 메모리 ≤80%, CPU ≤70%)을 달성하기 위해 전략 실행 최적화, 로깅 최적화, GPU 메모리 관리, 스레드 동기화 개선을 통한 성능 병목 해결"
-    },
-    {
-      "id": "eae3c25e-761e-49e0-98b3-44a8bc948cfd",
-      "name": "로깅 최적화 및 프로덕션 모드 구현",
-      "description": "debug_detection 플래그를 활용하여 프로덕션 모드에서 불필요한 디버그 로깅을 제거하고, 필수 로깅만 수행하도록 최적화합니다. 비동기 로깅을 구현하여 로깅으로 인한 성능 저하를 방지합니다.",
-      "notes": "기존 로깅 시스템의 호환성을 유지하면서 성능 모드 추가",
+      "id": "e99fcb1d-378e-4389-8cb0-3d53729570b8",
+      "name": "설정 저장 메커니즘 검증 및 로깅 강화",
+      "description": "SettingsDialog에서 설정 저장 시 성공/실패 여부를 명확히 로깅하고, Config 객체의 값이 올바르게 파일에 저장되는지 검증하는 로직 추가",
+      "notes": "디버깅을 위한 로깅 강화로 설정 저장 과정에서 어느 단계에서 문제가 발생하는지 명확히 파악할 수 있도록 함",
       "status": "pending",
       "dependencies": [
         {
-          "taskId": "a653303d-ca8c-415b-a283-e2918495be71"
+          "taskId": "77d8b582-72ea-4a34-9bcf-a314cbda0ddb"
         }
       ],
-      "createdAt": "2025-06-13T17:13:49.490Z",
-      "updatedAt": "2025-06-13T17:13:49.490Z",
+      "createdAt": "2025-06-13T19:21:59.534Z",
+      "updatedAt": "2025-06-13T19:21:59.534Z",
       "relatedFiles": [
         {
-          "path": "processing.py",
+          "path": "C:\\Users\\USER\\Documents\\MCPData\\litteringDetect2\\ui.py",
           "type": "TO_MODIFY",
-          "description": "로깅 최적화 및 프로덕션 모드 로직 추가",
-          "lineStart": 50,
-          "lineEnd": 100
-        },
-        {
-          "path": "detection_strategies.py",
-          "type": "TO_MODIFY",
-          "description": "전략별 디버그 로깅 최적화",
-          "lineStart": 1,
-          "lineEnd": 50
-        }
-      ],
-      "implementationGuide": "processing.py와 detection_strategies.py에서 debug_detection 플래그 체크 추가, logging 모듈을 활용한 레벨별 로깅 구현, 중요 이벤트만 파일 로깅하도록 최적화",
-      "verificationCriteria": "프로덕션 모드에서 로깅 오버헤드가 최소화되고, 필수 정보만 로깅되며, 전체 처리 성능이 향상되는지 확인",
-      "analysisResult": "쓰레기 감지 시스템의 성능 최적화: 감지 정확도(False Positive ≤5%, False Negative ≤10%)를 유지하면서 실시간 처리 성능(≥15 FPS, GPU 메모리 ≤80%, CPU ≤70%)을 달성하기 위해 전략 실행 최적화, 로깅 최적화, GPU 메모리 관리, 스레드 동기화 개선을 통한 성능 병목 해결"
-    },
-    {
-      "id": "e54862b5-0b86-476d-a4c1-9c1028c94ebb",
-      "name": "GPU 메모리 관리 및 배치 크기 동적 조정",
-      "description": "GPU 메모리 사용률을 모니터링하여 OOM 오류를 방지하고, 배치 크기를 동적으로 조정하여 GPU 활용률을 최적화합니다. torch.cuda.empty_cache()를 적절한 시점에 호출하여 메모리 정리를 수행합니다.",
-      "notes": "CUDA가 없는 환경에서도 정상 작동하도록 예외 처리 필수",
-      "status": "pending",
-      "dependencies": [
-        {
-          "taskId": "eae3c25e-761e-49e0-98b3-44a8bc948cfd"
-        }
-      ],
-      "createdAt": "2025-06-13T17:13:49.490Z",
-      "updatedAt": "2025-06-13T17:13:49.490Z",
-      "relatedFiles": [
-        {
-          "path": "processing.py",
-          "type": "TO_MODIFY",
-          "description": "GPU 메모리 관리 및 동적 배치 크기 조정 로직",
-          "lineStart": 300,
-          "lineEnd": 400
-        }
-      ],
-      "implementationGuide": "processing.py의 VideoThread에서 GPU 메모리 사용률 모니터링 로직 추가, 배치 크기를 GPU 메모리 상황에 따라 동적 조정, 정기적인 GPU 메모리 정리 로직 구현",
-      "verificationCriteria": "GPU 메모리 사용률이 80% 이하로 유지되고, OOM 오류가 발생하지 않으며, 배치 크기가 메모리 상황에 맞게 자동 조정되는지 확인",
-      "analysisResult": "쓰레기 감지 시스템의 성능 최적화: 감지 정확도(False Positive ≤5%, False Negative ≤10%)를 유지하면서 실시간 처리 성능(≥15 FPS, GPU 메모리 ≤80%, CPU ≤70%)을 달성하기 위해 전략 실행 최적화, 로깅 최적화, GPU 메모리 관리, 스레드 동기화 개선을 통한 성능 병목 해결"
-    },
-    {
-      "id": "fb6e4e4a-8e2d-4ba3-8d3b-66f77dc1a6a8",
-      "name": "스레드 동기화 및 큐 최적화",
-      "description": "멀티스레드 처리에서 락 사용 시간을 최소화하고, 큐 크기를 최적화하여 스레드 간 병목을 제거합니다. 특히 batch_lock, buffer_lock, event_lock의 사용을 최적화합니다.",
-      "notes": "스레드 안전성을 보장하면서 성능 향상에 집중",
-      "status": "pending",
-      "dependencies": [
-        {
-          "taskId": "e54862b5-0b86-476d-a4c1-9c1028c94ebb"
-        }
-      ],
-      "createdAt": "2025-06-13T17:13:49.490Z",
-      "updatedAt": "2025-06-13T17:13:49.490Z",
-      "relatedFiles": [
-        {
-          "path": "processing.py",
-          "type": "TO_MODIFY",
-          "description": "스레드 동기화 최적화 및 큐 관리 개선",
-          "lineStart": 500,
+          "description": "SettingsDialog.save_settings() 메서드에 로깅 추가",
+          "lineStart": 550,
           "lineEnd": 600
+        },
+        {
+          "path": "C:\\Users\\USER\\Documents\\MCPData\\litteringDetect2\\processing.py",
+          "type": "TO_MODIFY",
+          "description": "update_config() 함수와 save_settings_to_file() 함수에 로깅 강화",
+          "lineStart": 200,
+          "lineEnd": 300
         }
       ],
-      "implementationGuide": "processing.py에서 락 사용 범위 최소화, 큐 크기를 시스템 리소스에 맞게 동적 조정, 불필요한 동기화 포인트 제거",
-      "verificationCriteria": "스레드 간 대기 시간이 최소화되고, 큐 오버플로우가 발생하지 않으며, 전체 처리 throughput이 향상되는지 확인",
-      "analysisResult": "쓰레기 감지 시스템의 성능 최적화: 감지 정확도(False Positive ≤5%, False Negative ≤10%)를 유지하면서 실시간 처리 성능(≥15 FPS, GPU 메모리 ≤80%, CPU ≤70%)을 달성하기 위해 전략 실행 최적화, 로깅 최적화, GPU 메모리 관리, 스레드 동기화 개선을 통한 성능 병목 해결"
+      "implementationGuide": "1. SettingsDialog.save_settings()에서 update_config() 호출 전후 로깅 추가\\n2. update_config() 함수에서 파일 저장 성공/실패 로그 강화\\n3. 설정 저장 후 파일 내용 확인 로직 추가",
+      "verificationCriteria": "1. 설정 변경 시 콘솔과 로그 파일에 상세한 저장 과정이 기록되는지 확인 2. 파일 저장 실패 시 명확한 오류 메시지가 출력되는지 확인 3. 저장된 설정값이 파일에서 올바르게 읽혀지는지 확인",
+      "analysisResult": "Min size 설정값이 UI에서 변경해도 다음 프로그램 시작 시 반영되지 않는 문제를 해결. 분석 결과 설정 저장 메커니즘은 이미 올바르게 구현되어 있으나, DetectionApp 초기화 시 ROI 설정에서 min_size, max_size 값을 Config 객체에 덮어쓰는 것이 원인."
     },
     {
-      "id": "b6277682-bab2-46d1-b709-b89b4f072e51",
-      "name": "통합 성능 테스트 및 벤치마크 검증",
-      "description": "모든 최적화가 완료된 후 통합 성능 테스트를 수행하여 목표 성능(≥15 FPS, GPU ≤80%, CPU ≤70%)을 달성했는지 검증하고, 감지 정확도가 유지되는지 확인합니다.",
-      "notes": "실제 운영 환경과 유사한 조건에서 테스트 수행",
+      "id": "44612ced-51ce-4b0b-8ec7-5095bce51a07",
+      "name": "통합 테스트 및 검증",
+      "description": "Min size 설정 변경부터 프로그램 재시작까지 전체 플로우를 테스트하여 문제가 완전히 해결되었는지 확인하고, 다른 설정값들도 동일하게 정상 작동하는지 검증",
+      "notes": "모든 설정 항목에 대해 포괄적인 테스트를 수행하여 부작용이 없는지 확인. 특히 ROI 설정 로드가 다른 설정값에 영향을 주지 않는지 검증",
       "status": "pending",
       "dependencies": [
         {
-          "taskId": "fb6e4e4a-8e2d-4ba3-8d3b-66f77dc1a6a8"
+          "taskId": "77d8b582-72ea-4a34-9bcf-a314cbda0ddb"
+        },
+        {
+          "taskId": "e99fcb1d-378e-4389-8cb0-3d53729570b8"
         }
       ],
-      "createdAt": "2025-06-13T17:13:49.490Z",
-      "updatedAt": "2025-06-13T17:13:49.490Z",
+      "createdAt": "2025-06-13T19:21:59.534Z",
+      "updatedAt": "2025-06-13T19:21:59.534Z",
       "relatedFiles": [
         {
-          "path": "LOG/performance_test_results.md",
-          "type": "CREATE",
-          "description": "성능 테스트 결과 문서",
+          "path": "C:\\Users\\USER\\Documents\\MCPData\\litteringDetect2\\default_settings.txt",
+          "type": "REFERENCE",
+          "description": "설정 파일 내용 확인 및 검증",
           "lineStart": 1,
           "lineEnd": 50
         },
         {
-          "path": "test_performance.py",
-          "type": "CREATE",
-          "description": "성능 테스트 스크립트",
+          "path": "C:\\Users\\USER\\Documents\\MCPData\\litteringDetect2\\ui.py",
+          "type": "REFERENCE",
+          "description": "전체 설정 관련 UI 동작 검증",
           "lineStart": 1,
           "lineEnd": 100
         }
       ],
-      "implementationGuide": "다양한 해상도(720p, 1080p)와 차량 수 시나리오에서 성능 테스트 수행, 감지 정확도 검증을 위한 테스트 케이스 실행, 성능 벤치마크 결과 문서화",
-      "verificationCriteria": "목표 성능 지표를 모두 달성하고, 감지 정확도가 기존 수준을 유지하며, 장시간 실행 시 안정성이 확인되는지 검증",
-      "analysisResult": "쓰레기 감지 시스템의 성능 최적화: 감지 정확도(False Positive ≤5%, False Negative ≤10%)를 유지하면서 실시간 처리 성능(≥15 FPS, GPU 메모리 ≤80%, CPU ≤70%)을 달성하기 위해 전략 실행 최적화, 로깅 최적화, GPU 메모리 관리, 스레드 동기화 개선을 통한 성능 병목 해결"
+      "implementationGuide": "1. 다양한 설정값(min_size, max_size, yolo_confidence 등) 변경 테스트\\n2. 프로그램 재시작 후 변경된 값이 UI에 올바르게 반영되는지 확인\\n3. default_settings.txt 파일 내용과 UI 표시 값 일치 여부 확인\\n4. ROI 설정과 Config 설정이 서로 독립적으로 작동하는지 검증",
+      "verificationCriteria": "1. 모든 설정 항목의 저장/로드가 정상 작동 2. 프로그램 재시작 시 변경된 설정값이 UI에 올바르게 표시 3. ROI 설정과 Config 설정이 서로 독립적으로 작동 4. 설정 저장/로드 과정에서 오류 발생하지 않음 5. 로그에 명확한 설정 처리 과정이 기록됨",
+      "analysisResult": "Min size 설정값이 UI에서 변경해도 다음 프로그램 시작 시 반영되지 않는 문제를 해결. 분석 결과 설정 저장 메커니즘은 이미 올바르게 구현되어 있으나, DetectionApp 초기화 시 ROI 설정에서 min_size, max_size 값을 Config 객체에 덮어쓰는 것이 원인."
     }
   ]
 }
