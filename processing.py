@@ -1092,7 +1092,7 @@ class VideoThread(QThread):
         for (x, y, w, h, obj_id) in tracked_objects:
             if obj_id == 398:
                 hardcoded_398_detected = True
-                logger.info(f"🧪 [ID 398 테스트 모드] 객체 감지됨 - 강제 바운딩박스 생성")
+                logger.info(f"[TEST] [ID 398 테스트 모드] 객체 감지됨 - 강제 바운딩박스 생성")
                 
                 # 강제로 빨간색 바운딩박스 생성 (테스트용)
                 cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 3)
@@ -1104,7 +1104,7 @@ class VideoThread(QThread):
         
         if hardcoded_398_detected:
             # ID 398이 감지되면 추가 디버깅 정보 출력
-            logger.info(f"🧪 [ID 398 하드코딩 테스트] 감지된 객체 정보:")
+            logger.info(f"[TEST] [ID 398 하드코딩 테스트] 감지된 객체 정보:")
             for (x, y, w, h, obj_id) in tracked_objects:
                 if obj_id == 398:
                     center = (x + w // 2, y + h // 2)
@@ -1189,9 +1189,9 @@ class VideoThread(QThread):
                     self.object_movements[obj_id]["count"] = self.object_movements[obj_id].get("count", 0) + 1
                     self.object_movements[obj_id]["last_update"] = time.time()
 
-                # 🧪 ID 398 특별 처리 - 상세 궤적 분석
+                # ID 398 특별 처리 - 상세 궤적 분석
                 if obj_id == 398:
-                    logger.info(f"🧪 [ID 398 궤적 분석]")
+                    logger.info(f"[TEST] [ID 398 궤적 분석]")
                     trajectory = self.object_movements[obj_id]["trajectory"]
                     logger.info(f"    총 궤적 길이: {len(trajectory)}")
                     
@@ -1223,7 +1223,7 @@ class VideoThread(QThread):
                         
                         # 경고: 수평 이동이 80% 이상일 경우
                         if horizontal_ratio > 0.8:
-                            logger.warning(f"🚨 [ID 398 경고] 수평 이동 비율이 높음 ({horizontal_ratio:.1%}) - 쓰레기가 아닐 가능성")
+                            logger.warning(f"[WARNING] [ID 398 경고] 수평 이동 비율이 높음 ({horizontal_ratio:.1%}) - 쓰레기가 아닐 가능성")
 
             # DetectionStrategyManager를 이용한 체계적인 감지 로직
             if len(self.object_movements[obj_id]["trajectory"]) >= 2:
@@ -1265,9 +1265,9 @@ class VideoThread(QThread):
                         # 기본값: ALL
                         detection_result = all(strategy_results.values()) if strategy_results else False
                     
-                    # 🧪 ID 398 강제 감지 테스트 (문제 상황 재현)
+                    # ID 398 강제 감지 테스트 (문제 상황 재현)
                     if obj_id == 398:
-                        logger.warning(f"🧪 [ID 398 테스트 모드] 강제 감지 활성화")
+                        logger.warning(f"[TEST] [ID 398 테스트 모드] 강제 감지 활성화")
                         logger.warning(f"    원래 감지 결과: {detection_result}")
                         logger.warning(f"    전략별 결과: {strategy_results}")
                         
@@ -1275,7 +1275,7 @@ class VideoThread(QThread):
                         detection_result = True
                         strategy_results["HARDCODED_398"] = True
                         
-                        logger.warning(f"    🚨 강제 변경 후 감지 결과: {detection_result}")
+                        logger.warning(f"    [FORCED] 강제 변경 후 감지 결과: {detection_result}")
                         logger.warning(f"    이는 실제 잘못된 감지 상황을 재현하는 테스트입니다!")
                     
                     # 상세 디버깅 정보 출력 (임계값 충족 객체만)

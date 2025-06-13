@@ -243,8 +243,8 @@ class GravityDirectionStrategy(DetectionStrategy):
         downward_moves = sum(1 for diff in y_movements if diff > 0)
         total_moves = len(y_movements)
         
-        # 전체 이동 중 최소 50% 이상이 실제 하강 움직임이어야 함
-        min_downward_ratio = 0.5
+        # 전체 이동 중 최소 80% 이상이 실제 하강 움직임이어야 함 (기준 강화)
+        min_downward_ratio = 0.8  # 50% -> 80%로 강화
         downward_ratio = downward_moves / total_moves if total_moves > 0 else 0
         
         result = downward_ratio >= min_downward_ratio and downward_moves >= 1
