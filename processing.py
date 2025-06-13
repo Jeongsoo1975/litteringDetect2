@@ -146,8 +146,48 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 ########################################
-# CUDA 전용 로거 설정 (파일만)
+# CUDA/GPU 정보 표시 및 로깅
 ########################################
+print("\n" + "="*60)
+print("🚀 LitteringDetect2 GPU/CUDA 상태 확인")
+print("="*60)
+
+cuda_available = torch.cuda.is_available()
+print(f"🔍 CUDA 사용 가능: {'✅ YES' if cuda_available else '❌ NO'}")
+
+if cuda_available:
+    try:
+        device_name = torch.cuda.get_device_name(0)
+        cuda_version = torch.version.cuda
+        pytorch_version = torch.__version__
+        device_count = torch.cuda.device_count()
+        
+        print(f"🎮 GPU 장치명: {device_name}")
+        print(f"🔧 CUDA 버전: {cuda_version}")
+        print(f"🐍 PyTorch 버전: {pytorch_version}")
+        print(f"📊 사용 가능한 GPU 수: {device_count}")
+        
+        # GPU 메모리 정보
+        memory_allocated = torch.cuda.memory_allocated(0) / 1024**3
+        memory_cached = torch.cuda.memory_reserved(0) / 1024**3
+        total_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3
+        
+        print(f"💾 GPU 메모리: {memory_allocated:.1f}GB 사용 / {total_memory:.1f}GB 전체")
+        print(f"⚡ 모델 실행 모드: GPU 가속 모드")
+        
+    except Exception as e:
+        print(f"⚠️  GPU 정보 가져오기 오류: {str(e)}")
+        print(f"🔄 CPU 모드로 폴백됩니다")
+        cuda_available = False
+else:
+    print(f"💻 CPU 모드로 실행됩니다")
+    print(f"💡 GPU 가속을 위해 CUDA 설치를 권장합니다")
+
+device = torch.device("cuda" if cuda_available else "cpu")
+print(f"🎯 최종 사용 장치: {device}")
+print("="*60 + "\n")
+
+# CUDA 로거 설정 (파일 기록용)
 cuda_logger = logging.getLogger("cuda_info")
 cuda_logger.setLevel(logging.INFO)
 cuda_logger.propagate = False
@@ -156,17 +196,18 @@ cuda_file_handler = logging.FileHandler(log_filename)
 cuda_file_handler.setLevel(logging.INFO)
 cuda_logger.addHandler(cuda_file_handler)
 
-cuda_logger.info(f"CUDA Available: {torch.cuda.is_available()}")
-
-if torch.cuda.is_available():
+# 로그 파일에도 기록
+cuda_logger.info(f"CUDA Available: {cuda_available}")
+if cuda_available:
     try:
         cuda_logger.info(f"CUDA Version: {torch.version.cuda}")
         cuda_logger.info(f"PyTorch Version: {torch.__version__}")
         cuda_logger.info(f"Device Name: {torch.cuda.get_device_name(0)}")
+        cuda_logger.info(f"Device Count: {torch.cuda.device_count()}")
+        cuda_logger.info(f"Total Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f}GB")
     except Exception as e:
         cuda_logger.error(f"CUDA 정보 가져오기 오류: {str(e)}")
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 cuda_logger.info(f"Using device: {device}")
 
 torch.backends.cudnn.enabled = True
@@ -461,41 +502,59 @@ class VideoThread(QThread):
             # 싱글톤 패턴으로 모델 로드
             self.model = load_model_with_spinner("yolov8n.pt")
 
+            # GPU/CUDA 상태 표시
+            print("\n" + "🔥"*30)
+            print("🎯 YOLO 모델 GPU 최적화 시작")
+            print("🔥"*30)
+
             # 안전한 모델 초기화 (CUDA 호환성 문제 해결)
             try:
                 # CUDA가 사용 가능하고 안전한 경우에만 GPU 사용
                 if torch.cuda.is_available():
+                    print("⚡ GPU 사용 가능 - GPU로 모델 이동 중...")
                     # GPU로 모델 이동
                     self.model.to(self.device)
                     
                     # CUDA 버전 호환성 확인 후 최적화 적용
                     try:
+                        print("🔧 모델 최적화 중 (fuse + half precision)...")
                         # float 상태에서 fuse 시도
                         self.model.float()
                         self.model.fuse()
                         # fuse 성공 시 half precision 적용
                         if self.device.type == 'cuda':
                             self.model.half()
+                        print("✅ GPU 최적화 완료! (fuse + half precision)")
                         logger.info("모델 GPU 최적화 완료 (fuse + half precision)")
                     except RuntimeError as cuda_err:
                         # CUDA 오류 발생 시 기본 float로 폴백
+                        print(f"⚠️  CUDA 최적화 실패: {str(cuda_err)}")
+                        print("🔄 CPU 모드로 폴백 중...")
                         logger.warning(f"CUDA 최적화 실패, CPU로 폴백: {str(cuda_err)}")
                         self.model.cpu().float()
                         self.device = torch.device("cpu")
+                        print("💻 CPU 모드로 전환 완료")
                         logger.info("CPU 모드로 전환됨")
                 else:
                     # CUDA가 없으면 CPU 사용
+                    print("💻 CUDA 없음 - CPU 모드로 초기화 중...")
                     self.model.cpu().float()
                     self.device = torch.device("cpu")
+                    print("✅ CPU 모드 초기화 완료")
                     logger.info("CPU 모드로 모델 초기화")
                     
             except Exception as model_opt_err:
                 # 모델 최적화 실패 시 기본 설정으로 폴백
+                print(f"❌ 모델 최적화 오류: {str(model_opt_err)}")
+                print("🔄 기본 CPU 모드로 폴백 중...")
                 logger.error(f"모델 최적화 중 오류: {str(model_opt_err)}")
                 self.model.cpu().float()
                 self.device = torch.device("cpu")
+                print("✅ 기본 CPU 모드 폴백 완료")
                 logger.info("기본 CPU 모드로 폴백 완료")
 
+            print(f"🎯 최종 사용 장치: {self.device}")
+            print("🔥"*30 + "\n")
             logger.info("모델 로드 및 초기화 성공")
         except Exception as e:
             logger.error(f"모델 초기화 중 오류: {str(e)}")
